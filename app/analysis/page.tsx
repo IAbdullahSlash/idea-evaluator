@@ -120,6 +120,8 @@ interface AnalysisData {
   }
   recommendations: string[]
   similarProjects: string[]
+  aiVerdict?: string
+  honestRealityCheck?: string
   projectTitle?: string
   projectDescription?: string
   contextAdjustment?: {
@@ -961,7 +963,7 @@ export default function AnalysisPage() {
                     <div className="flex flex-col text-right">
                       <span className="text-lg font-semibold mb-1">Targeted Audience:</span>
                       <span className="text-lg text-muted-foreground">
-                        {analysis.targetAudience || "General users"}
+                        {analysis.targetUsersMarketFit?.primaryUsers || "General users"}
                       </span>
                     </div>
                   </div>
@@ -1124,7 +1126,7 @@ export default function AnalysisPage() {
                   <li className="flex items-start gap-2">
                     <span className="text-green-500 font-bold">✓</span>
                     <div>
-                      <strong>Scalability:</strong> {stageData.stage2?.analysis?.keyStrengths?.scalability || "Scalability analysis needed"}
+                      <strong>Market Fit:</strong> {stageData.stage2?.analysis?.keyStrengths?.marketFit || "Market fit analysis needed"}
                     </div>
                   </li>
                 </ul>
@@ -1142,7 +1144,7 @@ export default function AnalysisPage() {
                   <li className="flex items-start gap-2">
                     <span className="text-yellow-500 font-bold">⚠</span>
                     <div>
-                      <strong>Security:</strong> {stageData.stage2?.analysis?.potentialChallenges?.securityConcerns || "Security analysis needed"}
+                      <strong>Usability:</strong> {stageData.stage2?.analysis?.potentialChallenges?.usabilityIssues || "Usability review needed"}
                     </div>
                   </li>
                 </ul>
@@ -1156,12 +1158,12 @@ export default function AnalysisPage() {
                   <Target className="w-4 h-4" />
                   Target Users & Market
                 </h4>
-                <p className="text-sm mb-2"><strong>Primary Users:</strong> {stageData.stage1?.TargetedAudience || analysis?.TargetedAudience || "User analysis needed"}</p>
+                <p className="text-sm mb-2"><strong>Primary Users:</strong> {stageData.stage1?.targetUsersMarketFit?.primaryUsers || analysis?.targetUsersMarketFit?.primaryUsers || "User analysis needed"}</p>
                     <p className="text-sm"><strong>Market Demand:</strong> {
-                  stageData.stage1?.marketDemand || 
-                  analysis?.marketDemand || 
-                  (stageData.stage1?.detectedDomain ? `Growing demand in ${stageData.stage1.detectedDomain} sector` : 
-                   analysis?.detectedDomain ? `Growing demand in ${analysis.detectedDomain} sector` : 
+                  stageData.stage1?.targetUsersMarketFit?.marketDemand ||
+                  analysis?.targetUsersMarketFit?.marketDemand ||
+                  (stageData.stage1?.detectedDomain ? `Growing demand in ${stageData.stage1.detectedDomain} sector` :
+                   analysis?.detectedDomain ? `Growing demand in ${analysis.detectedDomain} sector` :
                    "Market demand assessment needed")
                 }</p>
               </div>
