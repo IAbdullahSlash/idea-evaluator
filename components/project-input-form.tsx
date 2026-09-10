@@ -3,6 +3,7 @@
 import type React from "react"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -22,6 +23,7 @@ interface ProjectFormData {
 }
 
 export function ProjectInputForm() {
+  const router = useRouter()
   const [formData, setFormData] = useState<ProjectFormData>({
     title: "",
     description: "",
@@ -70,7 +72,7 @@ export function ProjectInputForm() {
       )
 
       // Redirect to analysis page
-      window.location.href = "/analysis"
+      router.push("/analysis")
     } catch (error) {
       console.error("Analysis error:", error)
       alert("Failed to analyze project. Please try again.")

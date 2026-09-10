@@ -825,26 +825,6 @@ export default function AnalysisPage() {
     }
   }
 
-  useEffect(() => {
-    // Clear all cached data on page load to always start fresh
-    const clearCachedData = () => {
-      localStorage.removeItem("projectAnalysis")
-      localStorage.removeItem("currentStage")
-      localStorage.removeItem("taskProgress")
-      
-      // Reset to initial state
-      setAnalysis(null)
-      setCurrentStage(AnalysisStage.INPUT)
-      setTaskProgress({})
-      setProjectModifications({
-        title: "",
-        description: "",
-      })
-    }
-
-    clearCachedData()
-  }, [])
-
   // 🎨 STAGE RENDERING COMPONENTS
   const renderStageContent = () => {
     switch (currentStage) {

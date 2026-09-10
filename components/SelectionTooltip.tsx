@@ -77,12 +77,10 @@ export const SelectionTooltip: React.FC<SelectionTooltipProps> = ({
     }
 
     document.addEventListener('mouseup', handleSelectionDelayed)
-    document.addEventListener('selectionchange', handleSelection)
     document.addEventListener('click', handleClickOutside)
 
     return () => {
       document.removeEventListener('mouseup', handleSelectionDelayed)
-      document.removeEventListener('selectionchange', handleSelection)
       document.removeEventListener('click', handleClickOutside)
     }
   }, [])
