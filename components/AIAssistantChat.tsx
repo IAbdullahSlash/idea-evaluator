@@ -58,7 +58,11 @@ export function AIAssistantChat() {
   }, [selectedText, isOpen])
 React.useEffect(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+      const el = scrollRef.current
+      const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 50
+      if (atBottom) {
+        el.scrollTop = el.scrollHeight
+      }
     }
   }, [messages, isThinking, streamingMessage])
 
@@ -125,8 +129,8 @@ React.useEffect(() => {
       setIsThinking(false)
       setIsStreaming(true)
       
-      // Stream the message word by word
-      const words = fullMessage.split(' ')
+      // Stream the message word by word (handles emojis/multi-byte via grapheme clusters)
+      const words = fullMessage.match(/\S+/g) || []
       let currentText = ''
       
       for (let i = 0; i < words.length; i++) {

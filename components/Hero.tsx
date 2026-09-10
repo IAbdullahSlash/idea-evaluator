@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { ArrowRight, Brain, Zap, Target } from "lucide-react"
+import { ArrowRight, Brain, Zap } from "lucide-react"
 import { SelectionTooltip } from "@/components/SelectionTooltip"
 
 export function Hero() {
