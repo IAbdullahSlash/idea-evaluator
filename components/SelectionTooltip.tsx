@@ -114,12 +114,12 @@ export const SelectionTooltip: React.FC<SelectionTooltipProps> = ({
           className="fixed z-[60] animate-in fade-in-0 zoom-in-95 duration-200"
           data-tooltip="ask-ai"
           style={{
-            left: `${tooltipPosition.x}px`,
-            top: `${tooltipPosition.y}px`,
+            left: `${Math.min(Math.max(tooltipPosition.x, 120), window.innerWidth - 120)}px`,
+            top: `${Math.max(tooltipPosition.y, 10)}px`,
             transform: 'translateX(-50%)',
           }}
         >
-          <div className="bg-background border border-border shadow-lg rounded-lg p-2 backdrop-blur-sm bg-background/95">
+          <div className="bg-background border border-border shadow-lg rounded-lg p-2 backdrop-blur-sm bg-background/95 max-w-[280px]">
             <Button
               onClick={handleAskAI}
               size="sm"

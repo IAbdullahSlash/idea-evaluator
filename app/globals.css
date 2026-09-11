@@ -75,6 +75,10 @@
     /* Shadows */
     --shadow-glow: 0 0 40px hsla(263, 70%, 50%, 0.2);
     --shadow-card: 0 8px 32px hsla(240, 10%, 3.9%, 0.1);
+
+    /* Brand colors for social links */
+    --twitter: 224 192 46;
+    --linkedin: 10 102 194;
   }
 
   .dark {
@@ -110,7 +114,7 @@
     --gradient-primary: linear-gradient(135deg, hsl(263 70% 50%), hsl(250 100% 60%));
     --gradient-accent: linear-gradient(135deg, hsl(193 100% 50%), hsl(220 100% 60%));
     --gradient-hero: linear-gradient(180deg, hsl(240 10% 3.9%), hsl(250 20% 10%));
-    
+
     /* Glass morphism */
     --glass-bg: hsla(240, 10%, 10%, 0.6);
     --glass-border: hsla(0, 0%, 100%, 0.1);
@@ -118,6 +122,10 @@
     /* Shadows */
     --shadow-glow: 0 0 40px hsla(263, 70%, 50%, 0.3);
     --shadow-card: 0 8px 32px hsla(0, 0%, 0%, 0.4);
+
+    /* Brand colors for social links */
+    --twitter: 224 192 46;
+    --linkedin: 10 102 194;
   }
 }
 

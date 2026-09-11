@@ -16,7 +16,7 @@ export function Hero() {
         <div className="text-center space-y-8">
           {/* Badge */}
           <div className="inline-flex items-center px-4 py-2 rounded-full border border-border bg-background/50 backdrop-blur-sm">
-            <Zap className="w-4 h-4 mr-2 text-yellow-500" />
+            <Zap className="w-4 h-4 mr-2 text-yellow-400" />
             <span className="text-sm font-medium">AI-Powered Project Analysis</span>
           </div>
 
@@ -68,9 +68,9 @@ export function Hero() {
       </div>
 
       {/* Decorative elements */}
-      <div className="absolute top-0 left-0 w-72 h-72 bg-purple-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob" />
-      <div className="absolute top-0 right-0 w-72 h-72 bg-pink-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-2000" />
-      <div className="absolute bottom-0 left-20 w-72 h-72 bg-blue-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-4000" />
+      <div className="absolute top-0 left-0 w-32 h-32 sm:w-48 sm:h-48 md:w-72 md:h-72 bg-purple-500/20 rounded-full mix-blend-multiply filter blur-xl animate-blob" />
+      <div className="absolute top-0 right-0 w-32 h-32 sm:w-48 sm:h-48 md:w-72 md:h-72 bg-pink-500/20 rounded-full mix-blend-multiply filter blur-xl animate-blob animation-delay-2000" />
+      <div className="absolute bottom-0 left-10 sm:left-20 w-32 h-32 sm:w-48 sm:h-48 md:w-72 md:h-72 bg-blue-500/20 rounded-full mix-blend-multiply filter blur-xl animate-blob animation-delay-4000" />
     </section>
     </SelectionTooltip>
   )

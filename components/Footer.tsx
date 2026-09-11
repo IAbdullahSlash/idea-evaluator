@@ -22,7 +22,7 @@ export function Footer() {
                 href="https://twitter.com/contributor1" 
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-muted-foreground hover:text-[#1DA1F2] transition-colors"
+                className="text-muted-foreground hover:text-[rgb(var(--twitter))] transition-colors"
                 aria-label="Abdullah Twitter"
               >
                 <Twitter className="h-4 w-4" />
@@ -40,7 +40,7 @@ export function Footer() {
                 href="https://www.linkedin.com/in/abdullah-azmi-492120359/" 
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-muted-foreground hover:text-[#0A66C2] transition-colors"
+                className="text-muted-foreground hover:text-[rgb(var(--linkedin))] transition-colors"
                 aria-label="Abdullah LinkedIn"
               >
                 <Linkedin className="h-4 w-4" />
@@ -52,7 +52,7 @@ export function Footer() {
                 href="https://twitter.com/contributor2" 
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-muted-foreground hover:text-[#1DA1F2] transition-colors"
+                className="text-muted-foreground hover:text-[rgb(var(--twitter))] transition-colors"
                 aria-label="Darakhshan Twitter"
               >
                 <Twitter className="h-4 w-4" />
@@ -70,7 +70,7 @@ export function Footer() {
                 href="https://www.linkedin.com/in/darakhshan-ifraque-6287a1320/" 
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-muted-foreground hover:text-[#0A66C2] transition-colors"
+                className="text-muted-foreground hover:text-[rgb(var(--linkedin))] transition-colors"
                 aria-label="Darakhshan LinkedIn"
               >
                 <Linkedin className="h-4 w-4" />
