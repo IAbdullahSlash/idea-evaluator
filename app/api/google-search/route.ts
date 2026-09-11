@@ -40,25 +40,17 @@ export async function POST(request: NextRequest) {
 
     console.log("[Google Search] Found solutions:", existingSolutions.length)
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       existingSolutions,
       totalResults: data.searchInformation?.totalResults || 0
     })
 
   } catch (error) {
     console.error("[Google Search] Error:", error)
-    
-    // Simple fallback
-    return NextResponse.json({ 
-      existingSolutions: [
-        {
-          name: "Search unavailable",
-          url: "#",
-          description: "Google Search API is currently unavailable. Please try again later.",
-          category: "Error"
-        }
-      ],
-      error: true
-    })
+
+    // Return proper error response so frontend can handle it
+    return NextResponse.json({
+      error: "Google Search API is currently unavailable. Please try again later."
+    }, { status: 500 })
   }
 }

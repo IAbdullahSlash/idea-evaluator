@@ -1764,9 +1764,13 @@ export default function AnalysisPage() {
       if (response.ok) {
         const suggestions = await response.json()
         setRefinementSuggestions(suggestions.suggestions || [])
+      } else {
+        const errorData = await response.json().catch(() => ({}))
+        alert(errorData.error || "Failed to generate refinement suggestions. Please try again.")
       }
     } catch (error) {
       console.error("Failed to generate refinement suggestions:", error)
+      alert("Network error. Please check your connection and try again.")
     } finally {
       setRefinementLoading(false)
     }
@@ -1788,7 +1792,7 @@ export default function AnalysisPage() {
         const rawNewAnalysis = await response.json()
         // 🔧 Apply validation to re-analyzed data
         const validatedNewAnalysis = validateAnalysisData(rawNewAnalysis)
-        
+
         const updatedAnalysis = {
           ...validatedNewAnalysis,
           projectTitle: projectModifications.title,
@@ -1799,9 +1803,13 @@ export default function AnalysisPage() {
         localStorage.setItem("projectAnalysis", JSON.stringify(updatedAnalysis))
         setShowRefinementTools(false)
         fetchGitHubRepos(projectModifications.title)
+      } else {
+        const errorData = await response.json().catch(() => ({}))
+        alert(errorData.error || "Re-analysis failed. Please try again.")
       }
     } catch (error) {
       console.error("Re-analysis failed:", error)
+      alert("Network error. Please check your connection and try again.")
     } finally {
       setRefinementLoading(false)
     }
