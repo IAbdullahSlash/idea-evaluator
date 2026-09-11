@@ -230,13 +230,13 @@ export function ProjectInputForm() {
             <div className="space-y-2">
               <h4 className="font-medium text-sm">Pro Tips for Better Analysis</h4>
               <div className="flex flex-wrap gap-2">
-                <Badge variant="outline" className="text-xs">
+                <Badge variant="outline" className="text-xs hover:bg-accent hover:text-accent-foreground transition-colors cursor-default">
                   Include target users
                 </Badge>
-                <Badge variant="outline" className="text-xs">
+                <Badge variant="outline" className="text-xs hover:bg-accent hover:text-accent-foreground transition-colors cursor-default">
                   Mention key features
                 </Badge>
-                <Badge variant="outline" className="text-xs">
+                <Badge variant="outline" className="text-xs hover:bg-accent hover:text-accent-foreground transition-colors cursor-default">
                   Specify tech preferences
                 </Badge>
                 <Badge variant="outline" className="text-xs">

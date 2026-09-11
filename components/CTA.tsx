@@ -6,7 +6,7 @@ export function CTA() {
   return (
     <section className="py-20">
       <div className="container mx-auto px-4">
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 p-8 md:p-16">
+        <div className="relative overflow-hidden rounded-3xl cta-gradient p-8 md:p-16">
           <div className="relative z-10 text-center space-y-8">
             <div className="space-y-4">
               <div className="inline-flex items-center px-4 py-2 rounded-full bg-white/20 backdrop-blur-sm text-white">

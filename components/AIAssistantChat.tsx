@@ -216,7 +216,7 @@ React.useEffect(() => {
       >
         <div className="flex flex-col h-full">
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b bg-card/50 backdrop-blur-sm">
+          <div className="flex items-center justify-between p-4 border-b border-border bg-card/50 backdrop-blur-sm">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
                 <Bot className="w-5 h-5 text-primary" />
@@ -418,7 +418,7 @@ React.useEffect(() => {
                   <button
                     key={index}
                     onClick={() => handleSuggestedQuestion(question)}
-                    className="w-full text-left text-sm p-3 rounded-lg bg-background hover:bg-accent transition-colors border"
+                    className="w-full text-left text-sm p-3 rounded-lg bg-background hover:bg-accent transition-colors border border-border"
                   >
                     {question}
                   </button>
@@ -428,7 +428,7 @@ React.useEffect(() => {
           )}
 
           {/* Input */}
-          <div className="p-4 border-t bg-card/50 backdrop-blur-sm">
+          <div className="p-4 border-t border-border bg-card/50 backdrop-blur-sm">
             <div className="flex gap-2">
               <Textarea
                 value={input}

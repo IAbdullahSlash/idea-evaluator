@@ -15,7 +15,7 @@ export function Hero() {
       <div className="relative container mx-auto px-4 py-20 sm:py-24 lg:py-32">
         <div className="text-center space-y-8">
           {/* Badge */}
-          <div className="inline-flex items-center px-4 py-2 rounded-full border bg-background/50 backdrop-blur-sm">
+          <div className="inline-flex items-center px-4 py-2 rounded-full border border-border bg-background/50 backdrop-blur-sm">
             <Zap className="w-4 h-4 mr-2 text-yellow-500" />
             <span className="text-sm font-medium">AI-Powered Project Analysis</span>
           </div>
@@ -43,7 +43,7 @@ export function Hero() {
                 <ArrowRight className="ml-2 w-5 h-5" />
               </Link>
             </Button>
-            <Button variant="outline" size="lg" className="text-lg px-8 py-6">
+            <Button variant="outline" size="lg" className="text-lg px-8 py-6 transition-all duration-300">
               <Brain className="mr-2 w-5 h-5" />
               See Example Analysis
             </Button>

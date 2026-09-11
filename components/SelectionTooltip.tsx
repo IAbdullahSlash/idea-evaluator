@@ -119,7 +119,7 @@ export const SelectionTooltip: React.FC<SelectionTooltipProps> = ({
             transform: 'translateX(-50%)',
           }}
         >
-          <div className="bg-background border shadow-lg rounded-lg p-2 backdrop-blur-sm bg-background/95">
+          <div className="bg-background border border-border shadow-lg rounded-lg p-2 backdrop-blur-sm bg-background/95">
             <Button
               onClick={handleAskAI}
               size="sm"
