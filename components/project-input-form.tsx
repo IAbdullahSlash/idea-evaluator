@@ -46,6 +46,7 @@ export function ProjectInputForm() {
         },
         body: JSON.stringify({
           idea: `${formData.title}: ${formData.description}`,
+          stage: 'stage1',
           experience: formData.experience,
           timeline: formData.timeline,
           domain: formData.domain,

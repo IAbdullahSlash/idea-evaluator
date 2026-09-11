@@ -1727,15 +1727,14 @@ export default function AnalysisPage() {
       })
 
       if (response.ok) {
-        const blob = await response.blob()
+        const html = await response.text()
+        const blob = new Blob([html], { type: "text/html" })
         const url = window.URL.createObjectURL(blob)
-        const a = document.createElement("a")
-        a.href = url
-        a.download = `${analysis.projectTitle || "Project"}_Analysis_Report.pdf`
-        document.body.appendChild(a)
-        a.click()
-        window.URL.revokeObjectURL(url)
-        document.body.removeChild(a)
+        const printWindow = window.open(url, "_blank")
+        if (!printWindow) {
+          // Fallback if popup blocked
+          alert("Please allow popups to export PDF, or use your browser's print function (Ctrl+P)")
+        }
       } else {
         throw new Error("Export failed")
       }

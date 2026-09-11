@@ -8,7 +8,11 @@ const groq = createGroq({
 
 export async function POST(request: NextRequest) {
   try {
-    const { idea, stage = 'stage1' } = await request.json()
+    const { idea, stage = 'stage1', domain, projectType, experience, timeline } = await request.json()
+
+    // 🚀 EXTRA CONTEXT FROM FRONTEND
+    const extraContext = [domain, projectType, experience, timeline].filter(Boolean).join(', ')
+    const contextPrefix = extraContext ? `${idea} (Domain: ${extraContext})` : idea
 
     // 🚀 1. STAGE-SPECIFIC PROMPT ENGINEERING
     const stagePrompts = {
@@ -108,10 +112,13 @@ Respond with ONLY valid JSON:
     // Select the appropriate prompt based on stage
     const selectedPrompt = stagePrompts[stage as keyof typeof stagePrompts] || stagePrompts.stage1
 
+    // 🚀 Incorporate extra frontend context into the prompt
+    const promptWithContext = selectedPrompt.replace('PROJECT TO ANALYZE: "${idea}"', `PROJECT TO ANALYZE: "${contextPrefix}"`)
+
     // 🚀 2. ENHANCED SINGLE-MODEL APPROACH with better JSON reliability
     const { text } = await generateText({
       model: groq("llama-3.1-8b-instant"),
-      prompt: selectedPrompt,
+      prompt: promptWithContext,
       temperature: 0.1, // Lower temperature for more consistent JSON output
     })
 
@@ -165,8 +172,51 @@ Respond with ONLY valid JSON:
 
     // 🚀 5. APPLY CONTEXT-AWARE SCORING
     const finalAnalysis = applyContextAwareScoring(analysis, idea)
-    
-    return NextResponse.json(finalAnalysis)
+
+    // 🚀 6. ENSURE ALL EXPECTED FIELDS ARE PRESENT
+    const enrichedAnalysis = {
+      ...finalAnalysis,
+      estimatedTimeframe: finalAnalysis.estimatedTimeframe || "TBD",
+      honestRealityCheck: finalAnalysis.honestRealityCheck || finalAnalysis.honestAiFeedback || "Analysis unavailable",
+      projectTitle: "",
+      projectDescription: "",
+      contextAdjustment: finalAnalysis.contextAdjustment || { multiplier: "1.00", reason: "Standard assessment" },
+      validationApplied: finalAnalysis.validationApplied || { adjustments: "None", confidence: "Medium" },
+      keyStrengths: finalAnalysis.keyStrengths || {
+        valueProposition: "Value proposition assessment needed",
+        marketFit: "Market fit analysis needed"
+      },
+      potentialChallenges: finalAnalysis.potentialChallenges || {
+        technicalRisks: "Technical risk assessment needed",
+        usabilityIssues: "Usability review needed",
+        marketRisks: "Market risk analysis needed"
+      },
+      requirementsScope: finalAnalysis.requirementsScope || {
+        mustHaveFeatures: [],
+        niceToHaveFeatures: [],
+        constraints: []
+      },
+      targetUsersMarketFit: finalAnalysis.targetUsersMarketFit || {
+        primaryUsers: "User analysis needed",
+        marketDemand: "Market demand assessment needed",
+        userValidation: "User validation strategy needed"
+      },
+      techStack: finalAnalysis.techStack || {
+        frontend: [],
+        backend: [],
+        database: [],
+        tools: []
+      },
+      roadmap: finalAnalysis.roadmap || {
+        phase1: { title: "Phase 1", duration: "TBD", tasks: [] },
+        phase2: { title: "Phase 2", duration: "TBD", tasks: [] },
+        phase3: { title: "Phase 3", duration: "TBD", tasks: [] }
+      },
+      recommendations: finalAnalysis.recommendations || [],
+      similarProjects: finalAnalysis.similarProjects || [],
+    }
+
+    return NextResponse.json(enrichedAnalysis)
   } catch (error) {
     console.error("Enhanced AI Analysis Error:", error)
     return NextResponse.json({ error: "Failed to analyze project idea" }, { status: 500 })

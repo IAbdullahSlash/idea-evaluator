@@ -29,3 +29,6 @@ next-env.d.ts
 # Documents
 Documents/
 integrated-nextjs/ 
+
+# Local task files
+task.txt
