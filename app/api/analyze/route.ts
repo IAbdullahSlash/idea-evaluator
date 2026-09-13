@@ -105,7 +105,14 @@ Respond with ONLY valid JSON:
     "backend": ["scalable backend solutions"],
     "database": ["appropriate database choice"],
     "tools": ["essential development tools"]
-  }
+  },
+  "requirementsScope": {
+    "mustHaveFeatures": ["List 3-5 essential features that must be in the MVP"],
+    "niceToHaveFeatures": ["List 3-5 features that would be valuable but not critical"],
+    "constraints": ["List 3-5 constraints like budget, time, technical limitations"]
+  },
+  "recommendations": ["List 3-5 actionable recommendations for next steps"],
+  "similarProjects": ["List 2-3 existing projects or companies with similar ideas"]
 }`
     }
 

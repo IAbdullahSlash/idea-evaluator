@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Textarea } from "@/components/ui/textarea"
+import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { SelectionTooltip } from "@/components/SelectionTooltip"
 import { useAIAssistant } from "@/contexts/AIAssistantContext"
@@ -617,7 +618,7 @@ export default function AnalysisPage() {
     }
   }
 
-  // � REGENERATE FUNCTIONS
+  // REGENERATE FUNCTIONS
   const regenerateStage1 = async () => {
     setLoading(true)
     try {
@@ -1786,7 +1787,7 @@ export default function AnalysisPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           idea: `${projectModifications.title}: ${projectModifications.description}`,
-          stage: 'stage2'
+          stage: 'stage1'
         }),
       })
 
@@ -1803,6 +1804,8 @@ export default function AnalysisPage() {
 
         setAnalysis(updatedAnalysis)
         localStorage.setItem("projectAnalysis", JSON.stringify(updatedAnalysis))
+        setStageData({})
+        setCurrentStage(AnalysisStage.QUICK_SNAPSHOT)
         setShowRefinementTools(false)
         fetchGitHubRepos(projectModifications.title)
       } else {
@@ -2406,6 +2409,65 @@ export default function AnalysisPage() {
           </div>
         </div>
       </header>
+
+      {/* Refinement Tools Panel */}
+      {showRefinementTools && analysis && (
+        <div className="container mx-auto px-4 py-4">
+          <Card className="max-w-4xl mx-auto bg-blue-500/5 border-blue-500/30">
+            <CardHeader>
+              <CardTitle className="text-xl flex items-center gap-2">
+                <Edit3 className="w-5 h-5 text-blue-500" />
+                Refine Your Project Description
+              </CardTitle>
+              <CardDescription>
+                Edit the title or description to get an updated analysis
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="refine-title">Project Title</Label>
+                <Input
+                  id="refine-title"
+                  value={projectModifications.title}
+                  onChange={(e) => setProjectModifications(prev => ({ ...prev, title: e.target.value }))}
+                  placeholder="Project title..."
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="refine-description">Project Description</Label>
+                <Textarea
+                  id="refine-description"
+                  value={projectModifications.description}
+                  onChange={(e) => setProjectModifications(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="Describe your project..."
+                  className="min-h-24"
+                />
+              </div>
+              <div className="flex gap-3">
+                <Button
+                  onClick={reAnalyzeProject}
+                  disabled={refinementLoading || !projectModifications.description.trim()}
+                  className="flex items-center gap-2"
+                >
+                  {refinementLoading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="w-4 h-4" />
+                  )}
+                  Re-analyze
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowRefinementTools(false)}
+                  disabled={refinementLoading}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-4xl mx-auto space-y-8">
