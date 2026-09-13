@@ -1,15 +1,61 @@
 import { type NextRequest, NextResponse } from "next/server"
 
+// Simple HTML sanitizer to prevent XSS
+function escapeHtml(str: string | undefined): string {
+  if (!str) return ""
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;")
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { analysis, taskProgress, overallProgress } = await request.json()
+
+    // Validate analysis exists
+    if (!analysis) {
+      return NextResponse.json({ error: "No analysis data provided" }, { status: 400 })
+    }
+
+    // Safely extract all properties with fallbacks
+    const a = {
+      projectTitle: analysis.projectTitle || "Project Analysis Report",
+      projectDescription: analysis.projectDescription || "",
+      feasibilityScore: analysis.feasibilityScore ?? 5,
+      successProbability: analysis.successProbability ?? 50,
+      difficultyLevel: analysis.difficultyLevel || "Intermediate",
+      estimatedTimeframe: analysis.estimatedTimeframe || "TBD",
+      detectedDomain: analysis.detectedDomain || "Not specified",
+      honestAiFeedback: analysis.honestAiFeedback || "",
+      keyStrengths: (analysis.keyStrengths || []) as string[],
+      potentialChallenges: (analysis.potentialChallenges || []) as string[],
+      techStack: {
+        frontend: (analysis.techStack?.frontend || []) as string[],
+        backend: (analysis.techStack?.backend || []) as string[],
+        database: (analysis.techStack?.database || []) as string[],
+        tools: (analysis.techStack?.tools || []) as string[],
+      },
+      roadmap: {
+        phase1: analysis.roadmap?.phase1 || { title: "Phase 1", duration: "TBD", tasks: [] as string[] },
+        phase2: analysis.roadmap?.phase2 || { title: "Phase 2", duration: "TBD", tasks: [] as string[] },
+        phase3: analysis.roadmap?.phase3 || { title: "Phase 3", duration: "TBD", tasks: [] as string[] },
+      },
+      recommendations: (analysis.recommendations || []) as string[],
+      similarProjects: (analysis.similarProjects || []) as string[],
+    }
+
+    const tp = taskProgress || {}
+    const op = typeof overallProgress === "number" ? overallProgress : 0
 
     const htmlContent = `
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
-    <title>${analysis.projectTitle || "Project"} - Analysis Report</title>
+    <title>${escapeHtml(a.projectTitle)} - Analysis Report</title>
     <style>
         @media print {
             body { margin: 0; }
@@ -219,12 +265,12 @@ export async function POST(request: NextRequest) {
 </head>
 <body>
     <div class="header">
-        <div class="project-title">${analysis.projectTitle || "Project Analysis Report"}</div>
-        <div class="project-subtitle">${analysis.projectDescription || "AI-powered project analysis"}</div>
-        <div class="badge ${analysis.feasibilityScore >= 8 ? "badge-success" : analysis.feasibilityScore >= 6 ? "badge-warning" : "badge-danger"}">
-            ${analysis.feasibilityScore >= 8 ? "Highly Feasible" : analysis.feasibilityScore >= 6 ? "Feasible" : "Challenging"}
+        <div class="project-title">${escapeHtml(a.projectTitle)}</div>
+        <div class="project-subtitle">${escapeHtml(a.projectDescription)}</div>
+        <div class="badge ${a.feasibilityScore >= 8 ? "badge-success" : a.feasibilityScore >= 6 ? "badge-warning" : "badge-danger"}">
+            ${a.feasibilityScore >= 8 ? "Highly Feasible" : a.feasibilityScore >= 6 ? "Feasible" : "Challenging"}
         </div>
-        <p><strong>Domain:</strong> ${analysis.projectDomain || "Not specified"}</p>
+        <p><strong>Domain:</strong> ${escapeHtml(a.detectedDomain)}</p>
         <p><strong>Report Generated:</strong> ${new Date().toLocaleDateString("en-US", {
           year: "numeric",
           month: "long",
@@ -238,12 +284,12 @@ export async function POST(request: NextRequest) {
         <h2 class="section-title">📊 Project Progress Overview</h2>
         <div class="progress-section">
             <div class="progress-bar">
-                <div class="progress-fill" style="width: ${overallProgress}%">
-                    ${Math.round(overallProgress)}%
+                <div class="progress-fill" style="width: ${op}%">
+                    ${Math.round(op)}%
                 </div>
             </div>
-            <p><strong>Overall Progress:</strong> ${Math.round(overallProgress)}% completed</p>
-            <p><strong>Estimated Timeline:</strong> ${analysis.estimatedTimeframe}</p>
+            <p><strong>Overall Progress:</strong> ${Math.round(op)}% completed</p>
+            <p><strong>Estimated Timeline:</strong> ${escapeHtml(a.estimatedTimeframe)}</p>
         </div>
     </div>
 
@@ -251,15 +297,15 @@ export async function POST(request: NextRequest) {
         <h2 class="section-title">🎯 Feasibility Analysis</h2>
         <div class="metric-grid">
             <div class="metric-card">
-                <div class="metric-value">${analysis.feasibilityScore}/10</div>
+                <div class="metric-value">${a.feasibilityScore}/10</div>
                 <div class="metric-label">Feasibility Score</div>
             </div>
             <div class="metric-card">
-                <div class="metric-value">${analysis.successProbability}%</div>
+                <div class="metric-value">${a.successProbability}%</div>
                 <div class="metric-label">Success Probability</div>
             </div>
             <div class="metric-card">
-                <div class="metric-value">${analysis.difficultyLevel}</div>
+                <div class="metric-value">${escapeHtml(a.difficultyLevel)}</div>
                 <div class="metric-label">Difficulty Level</div>
             </div>
         </div>
@@ -268,13 +314,13 @@ export async function POST(request: NextRequest) {
             <div class="strengths">
                 <h4>✅ Key Strengths</h4>
                 <ul style="list-style: none; padding: 0;">
-                    ${analysis.keyStrengths.map((strength: string) => `<li class="list-item">${strength}</li>`).join("")}
+                    ${a.keyStrengths.map((strength: string) => `<li class="list-item">${escapeHtml(strength)}</li>`).join("")}
                 </ul>
             </div>
             <div class="challenges">
                 <h4>⚠️ Potential Challenges</h4>
                 <ul style="list-style: none; padding: 0;">
-                    ${analysis.potentialChallenges.map((challenge: string) => `<li class="list-item">${challenge}</li>`).join("")}
+                    ${a.potentialChallenges.map((challenge: string) => `<li class="list-item">${escapeHtml(challenge)}</li>`).join("")}
                 </ul>
             </div>
         </div>
@@ -286,25 +332,25 @@ export async function POST(request: NextRequest) {
             <div class="tech-category">
                 <h4>Frontend Technologies</h4>
                 <div class="tech-tags">
-                    ${analysis.techStack.frontend.map((tech: string) => `<span class="tech-tag">${tech}</span>`).join("")}
+                    ${a.techStack.frontend.map((tech: string) => `<span class="tech-tag">${escapeHtml(tech)}</span>`).join("")}
                 </div>
             </div>
             <div class="tech-category">
                 <h4>Backend Technologies</h4>
                 <div class="tech-tags">
-                    ${analysis.techStack.backend.map((tech: string) => `<span class="tech-tag">${tech}</span>`).join("")}
+                    ${a.techStack.backend.map((tech: string) => `<span class="tech-tag">${escapeHtml(tech)}</span>`).join("")}
                 </div>
             </div>
             <div class="tech-category">
                 <h4>Database Solutions</h4>
                 <div class="tech-tags">
-                    ${analysis.techStack.database.map((tech: string) => `<span class="tech-tag">${tech}</span>`).join("")}
+                    ${a.techStack.database.map((tech: string) => `<span class="tech-tag">${escapeHtml(tech)}</span>`).join("")}
                 </div>
             </div>
             <div class="tech-category">
                 <h4>Tools & Services</h4>
                 <div class="tech-tags">
-                    ${analysis.techStack.tools.map((tool: string) => `<span class="tech-tag">${tool}</span>`).join("")}
+                    ${a.techStack.tools.map((tool: string) => `<span class="tech-tag">${escapeHtml(tool)}</span>`).join("")}
                 </div>
             </div>
         </div>
@@ -312,38 +358,38 @@ export async function POST(request: NextRequest) {
 
     <div class="section">
         <h2 class="section-title">🗺️ Development Roadmap</h2>
-        
+
         <div class="roadmap-phase">
-            <div class="phase-title">Phase 1: ${analysis.roadmap.phase1.title} (${analysis.roadmap.phase1.duration})</div>
+            <div class="phase-title">Phase 1: ${escapeHtml(a.roadmap.phase1.title)} (${escapeHtml(a.roadmap.phase1.duration)})</div>
             <ul class="task-list">
-                ${analysis.roadmap.phase1.tasks
+                ${a.roadmap.phase1.tasks
                   .map(
                     (task: string, index: number) =>
-                      `<li class="task-item ${taskProgress[`phase1-${index}`] ? "completed-task" : ""}">${task}</li>`,
+                      `<li class="task-item ${tp[`phase1-${index}`] ? "completed-task" : ""}">${escapeHtml(task)}</li>`,
                   )
                   .join("")}
             </ul>
         </div>
 
         <div class="roadmap-phase">
-            <div class="phase-title">Phase 2: ${analysis.roadmap.phase2.title} (${analysis.roadmap.phase2.duration})</div>
+            <div class="phase-title">Phase 2: ${escapeHtml(a.roadmap.phase2.title)} (${escapeHtml(a.roadmap.phase2.duration)})</div>
             <ul class="task-list">
-                ${analysis.roadmap.phase2.tasks
+                ${a.roadmap.phase2.tasks
                   .map(
                     (task: string, index: number) =>
-                      `<li class="task-item ${taskProgress[`phase2-${index}`] ? "completed-task" : ""}">${task}</li>`,
+                      `<li class="task-item ${tp[`phase2-${index}`] ? "completed-task" : ""}">${escapeHtml(task)}</li>`,
                   )
                   .join("")}
             </ul>
         </div>
 
         <div class="roadmap-phase">
-            <div class="phase-title">Phase 3: ${analysis.roadmap.phase3.title} (${analysis.roadmap.phase3.duration})</div>
+            <div class="phase-title">Phase 3: ${escapeHtml(a.roadmap.phase3.title)} (${escapeHtml(a.roadmap.phase3.duration)})</div>
             <ul class="task-list">
-                ${analysis.roadmap.phase3.tasks
+                ${a.roadmap.phase3.tasks
                   .map(
                     (task: string, index: number) =>
-                      `<li class="task-item ${taskProgress[`phase3-${index}`] ? "completed-task" : ""}">${task}</li>`,
+                      `<li class="task-item ${tp[`phase3-${index}`] ? "completed-task" : ""}">${escapeHtml(task)}</li>`,
                   )
                   .join("")}
             </ul>
@@ -353,17 +399,17 @@ export async function POST(request: NextRequest) {
     <div class="section">
         <h2 class="section-title">💡 AI Recommendations</h2>
         <ul style="list-style: none; padding: 0;">
-            ${analysis.recommendations.map((rec: string) => `<li class="list-item">${rec}</li>`).join("")}
+            ${a.recommendations.map((rec: string) => `<li class="list-item">${escapeHtml(rec)}</li>`).join("")}
         </ul>
     </div>
 
     ${
-      analysis.similarProjects.length > 0
+      a.similarProjects.length > 0
         ? `
     <div class="section">
         <h2 class="section-title">🔗 Similar Projects for Reference</h2>
         <div class="tech-tags">
-            ${analysis.similarProjects.map((project: string) => `<span class="tech-tag">${project}</span>`).join("")}
+            ${a.similarProjects.map((project: string) => `<span class="tech-tag">${escapeHtml(project)}</span>`).join("")}
         </div>
     </div>
     `
