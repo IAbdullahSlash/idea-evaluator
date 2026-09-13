@@ -33,8 +33,10 @@ export function CTA() {
                   <ArrowRight className="ml-2 w-5 h-5" />
                 </Link>
               </Button>
-              <Button variant="outline" size="lg" className="border-white/20 text-white hover:bg-white/10 text-lg px-8 py-6">
-                View Sample Report
+              <Button asChild variant="outline" size="lg" className="border-white/20 text-white hover:bg-white/10 text-lg px-8 py-6">
+                <Link href="/analysis">
+                  View Sample Report
+                </Link>
               </Button>
             </div>
 
