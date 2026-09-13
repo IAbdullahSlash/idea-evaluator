@@ -8,10 +8,11 @@ const groq = createGroq({
 })
 
 export async function POST(request: NextRequest) {
-  try {
-    const { stage, analysis, idea } = await request.json()
+  const { stage, analysis, idea } = await request.json()
 
-    let responseData = {}
+  let responseData = {}
+
+  try {
 
     switch (stage) {
       case 2: // Executive Summary

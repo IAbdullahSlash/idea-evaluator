@@ -282,6 +282,7 @@ export default function AnalysisPage() {
       expertArticles: ExpertArticle[]
       existingSolutions: ExistingSolution[]
       githubRepos: GitHubRepo[]
+      analysis?: AnalysisData
     }
     stage3?: {
       projectMilestones: ProjectMilestone[]
@@ -316,8 +317,7 @@ export default function AnalysisPage() {
     title: "",
     description: "",
   })
-  const [isAIChatOpen, setIsAIChatOpen] = useState(false)
-  const { setProjectContext } = useAIAssistant()
+  const { setProjectContext, openAssistant } = useAIAssistant()
 
   // Simplified form data - only idea description needed
   const [formData, setFormData] = useState({
@@ -471,20 +471,14 @@ export default function AnalysisPage() {
 
     setAnalyzing(true)
     try {
-      console.log("[Analysis] Making API call to /api/analyze...")
       const response = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ idea: formData.idea, stage: 'stage1' }),
       })
 
-      console.log("[Analysis] API response status:", response.status)
-
       if (response.ok) {
         const rawAnalysisData = await response.json()
-        console.log("[Analysis] Raw API data:", rawAnalysisData)
-        console.log("[Analysis] honestAiFeedback field:", rawAnalysisData.honestAiFeedback)
-        console.log("[Analysis] Analysis data received successfully")
         
         // 🔧 Apply validation and fallbacks
         const validatedAnalysisData = validateAnalysisData(rawAnalysisData)
@@ -512,7 +506,6 @@ export default function AnalysisPage() {
         setCurrentStage(AnalysisStage.QUICK_SNAPSHOT)
       } else {
         const errorText = await response.text()
-        console.error("[Analysis] API call failed:", errorText)
         alert(`Failed to generate analysis. Status: ${response.status}`)
       }
     } catch (error) {
@@ -628,8 +621,6 @@ export default function AnalysisPage() {
   const regenerateStage1 = async () => {
     setLoading(true)
     try {
-      console.log("[Regenerate] Regenerating Stage 1...")
-      
       const response = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -638,8 +629,7 @@ export default function AnalysisPage() {
 
       if (response.ok) {
         const rawAnalysisData = await response.json()
-        console.log("[Regenerate] Stage 1 data regenerated successfully")
-        
+
         const validatedAnalysisData = validateAnalysisData(rawAnalysisData)
         const enhancedAnalysis = {
           ...validatedAnalysisData,
@@ -649,8 +639,6 @@ export default function AnalysisPage() {
 
         setAnalysis(enhancedAnalysis)
         setStageData(prev => ({ ...prev, stage1: enhancedAnalysis }))
-        
-        console.log("[Regenerate] Stage 1 regenerated successfully!")
       } else {
         throw new Error('Failed to regenerate Stage 1')
       }
@@ -665,8 +653,6 @@ export default function AnalysisPage() {
   const regenerateStage2 = async () => {
     setLoading(true)
     try {
-      console.log("[Regenerate] Regenerating Stage 2...")
-      
       // Regenerate Stage 2 Analysis
       const analysisResponse = await fetch('/api/analyze', {
         method: 'POST',
@@ -697,8 +683,6 @@ export default function AnalysisPage() {
           analysis: stage2Analysis
         }
       }))
-      
-      console.log("[Regenerate] Stage 2 regenerated successfully!")
     } catch (error) {
       console.error("[Regenerate] Stage 2 regeneration failed:", error)
       alert("Failed to regenerate Stage 2. Please try again.")
@@ -710,8 +694,6 @@ export default function AnalysisPage() {
   const regenerateStage3 = async () => {
     setLoading(true)
     try {
-      console.log("[Regenerate] Regenerating Stage 3...")
-      
       // Regenerate Stage 3 Data
       const projectMilestones = generateProjectMilestones()
       const teamRoles = generateTeamRoles()
@@ -722,8 +704,6 @@ export default function AnalysisPage() {
         ...prev,
         stage3: { projectMilestones, teamRoles, sdlcMapping, qaApproach }
       }))
-      
-      console.log("[Regenerate] Stage 3 regenerated successfully!")
     } catch (error) {
       console.error("[Regenerate] Stage 3 regeneration failed:", error)
       alert("Failed to regenerate Stage 3. Please try again.")
@@ -975,7 +955,7 @@ export default function AnalysisPage() {
               
               {/* Category and Targeted Audience - Side by side */}
               {(() => {
-                const { category, tags } = generateCategoryAndTags(analysis.projectDescription, analysis.projectTitle)
+                const { category, tags } = analysis ? generateCategoryAndTags(analysis.projectDescription || "", analysis.projectTitle || "") : { category: "Tech", tags: [] }
                 return (
                   <div className="flex items-start justify-between gap-8">
                     <div className="flex flex-col">
@@ -1126,8 +1106,8 @@ export default function AnalysisPage() {
             <div className="border-l-4 border-red-500 pl-4 bg-red-500/5 p-4 rounded-r-lg">
               <h4 className="font-bold text-red-600 mb-3">Honest Feedback</h4>
               <div className="text-sm space-y-3">
-                <TypingText 
-                  text={sanitizeMarkdown(stageData.stage2?.analysis?.honestAiFeedback || "Analysis feedback not available")} 
+                <TypingText
+                  text={sanitizeMarkdown(stageData.stage2?.analysis?.honestAiFeedback || analysis?.honestAiFeedback || "Analysis feedback not available")}
                   speed={15}
                   className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-red-600 prose-strong:text-red-700 prose-li:text-gray-700 dark:prose-li:text-gray-300"
                 />
@@ -1142,13 +1122,13 @@ export default function AnalysisPage() {
                   <li className="flex items-start gap-2">
                     <span className="text-green-500 font-bold">✓</span>
                     <div>
-                      <strong>Value Proposition:</strong> {stageData.stage2?.analysis?.keyStrengths?.valueProposition || "Value proposition assessment needed"}
+                      <strong>Value Proposition:</strong> {stageData.stage2?.analysis?.keyStrengths?.valueProposition || analysis?.keyStrengths?.valueProposition || "Value proposition assessment needed"}
                     </div>
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-green-500 font-bold">✓</span>
                     <div>
-                      <strong>Market Fit:</strong> {stageData.stage2?.analysis?.keyStrengths?.marketFit || "Market fit analysis needed"}
+                      <strong>Market Fit:</strong> {stageData.stage2?.analysis?.keyStrengths?.marketFit || analysis?.keyStrengths?.marketFit || "Market fit analysis needed"}
                     </div>
                   </li>
                 </ul>
@@ -1160,13 +1140,13 @@ export default function AnalysisPage() {
                   <li className="flex items-start gap-2">
                     <span className="text-yellow-500 font-bold">⚠</span>
                     <div>
-                      <strong>Technical:</strong> {stageData.stage2?.analysis?.potentialChallenges?.technicalRisks || "Technical risk assessment needed"}
+                      <strong>Technical:</strong> {stageData.stage2?.analysis?.potentialChallenges?.technicalRisks || analysis?.potentialChallenges?.technicalRisks || "Technical risk assessment needed"}
                     </div>
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-yellow-500 font-bold">⚠</span>
                     <div>
-                      <strong>Usability:</strong> {stageData.stage2?.analysis?.potentialChallenges?.usabilityIssues || "Usability review needed"}
+                      <strong>Usability:</strong> {stageData.stage2?.analysis?.potentialChallenges?.usabilityIssues || analysis?.potentialChallenges?.usabilityIssues || "Usability review needed"}
                     </div>
                   </li>
                 </ul>
@@ -1647,7 +1627,7 @@ export default function AnalysisPage() {
                 />
                 <Button
                   size="sm"
-                  onClick={() => navigator.clipboard.writeText(stageData.stage5.shareableLink)}
+                  onClick={() => navigator.clipboard.writeText(stageData.stage5?.shareableLink || "")}
                 >
                   Copy Link
                 </Button>
@@ -2086,7 +2066,6 @@ export default function AnalysisPage() {
 
       if (response.ok) {
         const data = await response.json()
-        console.log("[Google Search] Found existing solutions:", data.existingSolutions?.length || 0)
         return data.existingSolutions || []
       }
     } catch (error) {
@@ -2416,7 +2395,7 @@ export default function AnalysisPage() {
                 </Button>
                 <Button
                   variant="default"
-                  onClick={() => setIsAIChatOpen(true)}
+                  onClick={openAssistant}
                   className="flex items-center gap-2"
                 >
                   <MessageCircle className="w-4 h-4" />
@@ -2445,11 +2424,6 @@ export default function AnalysisPage() {
       </div>
 
       {/* AI Assistant Chat */}
-      <AIAssistantChat
-        isOpen={isAIChatOpen}
-        onClose={() => setIsAIChatOpen(false)}
-        projectContext={analysis ? `${analysis.projectTitle}: ${analysis.projectDescription}` : undefined}
-      />
     </div>
     </SelectionTooltip>
   )

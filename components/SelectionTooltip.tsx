@@ -25,17 +25,12 @@ export const SelectionTooltip: React.FC<SelectionTooltipProps> = ({
       const selection = window.getSelection()
       const text = selection?.toString().trim()
 
-      console.log('Selection detected:', text) // Debug log
-
       if (text && text.length > 3 && containerRef.current) {
         const range = selection?.getRangeAt(0)
         const rect = range?.getBoundingClientRect()
         
         if (rect) {
           const containerRect = containerRef.current.getBoundingClientRect()
-          
-          console.log('Container rect:', containerRect) // Debug log
-          console.log('Selection rect:', rect) // Debug log
           
           // Check if selection is within our container
           const isWithinContainer = 
@@ -44,8 +39,6 @@ export const SelectionTooltip: React.FC<SelectionTooltipProps> = ({
             rect.top >= containerRect.top &&
             rect.bottom <= containerRect.bottom
 
-          console.log('Is within container:', isWithinContainer) // Debug log
-
           if (isWithinContainer) {
             setSelectedText(text)
             setTooltipPosition({
@@ -53,7 +46,6 @@ export const SelectionTooltip: React.FC<SelectionTooltipProps> = ({
               y: rect.top - 60 // Position above the selection with more space
             })
             setShowTooltip(true)
-            console.log('Showing tooltip') // Debug log
             return
           }
         }
@@ -87,7 +79,6 @@ export const SelectionTooltip: React.FC<SelectionTooltipProps> = ({
 
   const handleAskAI = () => {
     if (selectedText) {
-      console.log('Ask AI clicked with text:', selectedText) // Debug log
       openWithText(selectedText, "Selected text from the page")
       setShowTooltip(false)
       

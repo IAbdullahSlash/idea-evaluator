@@ -122,50 +122,44 @@ Respond with ONLY valid JSON:
       temperature: 0.1, // Lower temperature for more consistent JSON output
     })
 
-    console.log("[DEBUG] Raw AI response:", text.substring(0, 200) + "...")
-
     // 🚀 3. IMPROVED JSON EXTRACTION WITH CLEANING
     let analysis
     try {
       // Clean the response first
       let cleanedText = text.trim()
-      
+
       // Remove any potential markdown code blocks
       cleanedText = cleanedText.replace(/```json\s*/g, '').replace(/```\s*/g, '')
-      
+
       // Try to parse the cleaned response
       analysis = JSON.parse(cleanedText)
     } catch (parseError) {
-      console.log("[DEBUG] Direct parsing failed, attempting JSON extraction...")
-      
+      // Attempt JSON extraction
+
       // Extract JSON from the response more aggressively
       const jsonStart = text.indexOf('{')
       const jsonEnd = text.lastIndexOf('}')
-      
+
       if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
         let jsonString = text.substring(jsonStart, jsonEnd + 1)
-        
+
         // Clean the extracted JSON
         jsonString = jsonString.replace(/\n\s*\n/g, '\n') // Remove extra newlines
         jsonString = jsonString.replace(/,(\s*[}\]])/g, '$1') // Remove trailing commas
-        
-        console.log("[DEBUG] Extracted JSON:", jsonString.substring(0, 300) + "...")
-        
+
         try {
           analysis = JSON.parse(jsonString)
         } catch (extractError) {
-          console.error("[DEBUG] JSON extraction also failed:", extractError)
-          console.error("[DEBUG] Problematic JSON substring:", jsonString.substring(Math.max(0, 260-50), 260+50))
-          
+          console.error("JSON extraction failed:", extractError)
+
           // 🚀 4. RETURN ERROR - NO FALLBACK
-          return NextResponse.json({ 
-            error: "AI analysis failed to generate valid response. Please try again." 
+          return NextResponse.json({
+            error: "AI analysis failed to generate valid response. Please try again."
           }, { status: 500 })
         }
       } else {
-        console.error("[DEBUG] No valid JSON structure found in response")
-        return NextResponse.json({ 
-          error: "AI analysis failed to generate valid response. Please try again." 
+        return NextResponse.json({
+          error: "AI analysis failed to generate valid response. Please try again."
         }, { status: 500 })
       }
     }

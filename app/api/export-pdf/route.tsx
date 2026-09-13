@@ -268,13 +268,13 @@ export async function POST(request: NextRequest) {
             <div class="strengths">
                 <h4>✅ Key Strengths</h4>
                 <ul style="list-style: none; padding: 0;">
-                    ${analysis.keyStrengths.map((strength) => `<li class="list-item">${strength}</li>`).join("")}
+                    ${analysis.keyStrengths.map((strength: string) => `<li class="list-item">${strength}</li>`).join("")}
                 </ul>
             </div>
             <div class="challenges">
                 <h4>⚠️ Potential Challenges</h4>
                 <ul style="list-style: none; padding: 0;">
-                    ${analysis.potentialChallenges.map((challenge) => `<li class="list-item">${challenge}</li>`).join("")}
+                    ${analysis.potentialChallenges.map((challenge: string) => `<li class="list-item">${challenge}</li>`).join("")}
                 </ul>
             </div>
         </div>
@@ -286,25 +286,25 @@ export async function POST(request: NextRequest) {
             <div class="tech-category">
                 <h4>Frontend Technologies</h4>
                 <div class="tech-tags">
-                    ${analysis.techStack.frontend.map((tech) => `<span class="tech-tag">${tech}</span>`).join("")}
+                    ${analysis.techStack.frontend.map((tech: string) => `<span class="tech-tag">${tech}</span>`).join("")}
                 </div>
             </div>
             <div class="tech-category">
                 <h4>Backend Technologies</h4>
                 <div class="tech-tags">
-                    ${analysis.techStack.backend.map((tech) => `<span class="tech-tag">${tech}</span>`).join("")}
+                    ${analysis.techStack.backend.map((tech: string) => `<span class="tech-tag">${tech}</span>`).join("")}
                 </div>
             </div>
             <div class="tech-category">
                 <h4>Database Solutions</h4>
                 <div class="tech-tags">
-                    ${analysis.techStack.database.map((tech) => `<span class="tech-tag">${tech}</span>`).join("")}
+                    ${analysis.techStack.database.map((tech: string) => `<span class="tech-tag">${tech}</span>`).join("")}
                 </div>
             </div>
             <div class="tech-category">
                 <h4>Tools & Services</h4>
                 <div class="tech-tags">
-                    ${analysis.techStack.tools.map((tool) => `<span class="tech-tag">${tool}</span>`).join("")}
+                    ${analysis.techStack.tools.map((tool: string) => `<span class="tech-tag">${tool}</span>`).join("")}
                 </div>
             </div>
         </div>
@@ -318,7 +318,7 @@ export async function POST(request: NextRequest) {
             <ul class="task-list">
                 ${analysis.roadmap.phase1.tasks
                   .map(
-                    (task, index) =>
+                    (task: string, index: number) =>
                       `<li class="task-item ${taskProgress[`phase1-${index}`] ? "completed-task" : ""}">${task}</li>`,
                   )
                   .join("")}
@@ -330,7 +330,7 @@ export async function POST(request: NextRequest) {
             <ul class="task-list">
                 ${analysis.roadmap.phase2.tasks
                   .map(
-                    (task, index) =>
+                    (task: string, index: number) =>
                       `<li class="task-item ${taskProgress[`phase2-${index}`] ? "completed-task" : ""}">${task}</li>`,
                   )
                   .join("")}
@@ -342,7 +342,7 @@ export async function POST(request: NextRequest) {
             <ul class="task-list">
                 ${analysis.roadmap.phase3.tasks
                   .map(
-                    (task, index) =>
+                    (task: string, index: number) =>
                       `<li class="task-item ${taskProgress[`phase3-${index}`] ? "completed-task" : ""}">${task}</li>`,
                   )
                   .join("")}
@@ -353,7 +353,7 @@ export async function POST(request: NextRequest) {
     <div class="section">
         <h2 class="section-title">💡 AI Recommendations</h2>
         <ul style="list-style: none; padding: 0;">
-            ${analysis.recommendations.map((rec) => `<li class="list-item">${rec}</li>`).join("")}
+            ${analysis.recommendations.map((rec: string) => `<li class="list-item">${rec}</li>`).join("")}
         </ul>
     </div>
 
@@ -363,7 +363,7 @@ export async function POST(request: NextRequest) {
     <div class="section">
         <h2 class="section-title">🔗 Similar Projects for Reference</h2>
         <div class="tech-tags">
-            ${analysis.similarProjects.map((project) => `<span class="tech-tag">${project}</span>`).join("")}
+            ${analysis.similarProjects.map((project: string) => `<span class="tech-tag">${project}</span>`).join("")}
         </div>
     </div>
     `
