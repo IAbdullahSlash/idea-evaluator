@@ -81,63 +81,126 @@ async function generateStage2Data(analysis: any, idea: string) {
 }
 
 async function generateStage3Data(analysis: any) {
+  // Try AI generation first
+  try {
+    const prompt = `
+You are a senior project manager. Based on the following project analysis, create a detailed project roadmap, team structure, SDLC approach, and QA strategy.
+
+PROJECT ANALYSIS:
+${JSON.stringify(analysis, null, 2)}
+
+Return a JSON object with this structure:
+{
+  "projectMilestones": [
+    {
+      "phase": "string",
+      "deliverables": ["string"],
+      "duration": "string",
+      "dependencies": ["string"]
+    }
+  ],
+  "teamRoles": [
+    {
+      "role": "string",
+      "fteEstimate": number,
+      "skills": ["string"],
+      "description": "string"
+    }
+  ],
+  "sdlcMapping": "string",
+  "qaApproach": "string"
+}
+
+Guidelines:
+- Create 4 phases: Project Initiation, Planning & Design, Development & Testing, Launch & Deployment
+- Each phase should have 3-5 specific deliverables
+- Team roles should be tailored to the project's detected domain
+- SDLC should match project complexity (Lean for startups, Agile for general, Hybrid for enterprise)
+- QA approach should include testing strategies relevant to the tech stack`
+
+    const groq = createGroq({ apiKey: process.env.GROQ_API_KEY })
+    const { text } = await generateText({
+      model: groq("llama-3.1-8b-instant"),
+      prompt: prompt,
+      temperature: 0.2,
+    })
+
+    // Clean and parse the response
+    const cleanedText = text.trim()
+      .replace(/```json\s*/g, '').replace(/```\s*/g, '')
+    const aiData = JSON.parse(cleanedText)
+
+    // Validate structure
+    if (aiData.projectMilestones && aiData.teamRoles) {
+      return {
+        projectMilestones: aiData.projectMilestones,
+        teamRoles: aiData.teamRoles,
+        sdlcMapping: aiData.sdlcMapping || "Agile methodology with 2-week sprints, daily standups, and sprint retrospectives.",
+        qaApproach: aiData.qaApproach || "Multi-layered testing including unit, integration, and end-to-end tests."
+      }
+    }
+  } catch (e) {
+    console.warn("AI generation for stage 3 failed, using fallback:", e)
+  }
+
+  // Fallback to template-based generation
   const projectMilestones = [
     {
-      phase: "Initiation",
-      deliverables: ["Project charter", "Stakeholder analysis", "Initial requirements gathering"],
+      phase: "Project Initiation",
+      deliverables: ["Project charter", "Stakeholder analysis", "Initial requirements", "Market research"],
       duration: "1-2 weeks",
       dependencies: []
     },
     {
-      phase: "Planning",
-      deliverables: ["Detailed requirements", "Technical architecture", "Project timeline", "Resource allocation"],
-      duration: "2-3 weeks",
-      dependencies: ["Initiation"]
+      phase: "Planning & Design",
+      deliverables: ["Detailed requirements", "Technical architecture", "UI/UX design", "Development plan"],
+      duration: "2-4 weeks",
+      dependencies: ["Project Initiation"]
     },
     {
-      phase: "Execution",
-      deliverables: ["MVP development", "Core feature implementation", "Basic testing"],
-      duration: "6-8 weeks",
-      dependencies: ["Planning"]
+      phase: "Development & Testing",
+      deliverables: ["MVP development", "Core features", "Testing & QA", "Beta user feedback"],
+      duration: "6-10 weeks",
+      dependencies: ["Planning & Design"]
     },
     {
-      phase: "Monitoring",
-      deliverables: ["User feedback collection", "Performance monitoring", "Issue tracking"],
-      duration: "2-3 weeks",
-      dependencies: ["Execution"]
-    },
-    {
-      phase: "Closure",
-      deliverables: ["Final testing", "Documentation", "Deployment", "Post-launch review"],
+      phase: "Launch & Deployment",
+      deliverables: ["Production deployment", "User onboarding", "Marketing launch", "Performance monitoring"],
       duration: "1-2 weeks",
-      dependencies: ["Monitoring"]
+      dependencies: ["Development & Testing"]
     }
   ]
 
   const teamRoles = [
     {
+      role: "Project Manager",
+      fteEstimate: 0.5,
+      skills: ["Agile", "Stakeholder management", "Risk assessment"],
+      description: "Oversees project timeline, coordinates team, manages stakeholders"
+    },
+    {
       role: "Frontend Developer",
       fteEstimate: 1,
-      skills: ["React", "TypeScript", "CSS/SCSS", "Responsive Design"],
-      description: "Responsible for user interface development and client-side functionality"
+      skills: ["React", "TypeScript", "CSS", "Responsive design"],
+      description: "Responsible for user interface and user experience development"
     },
     {
       role: "Backend Developer",
       fteEstimate: 1,
-      skills: ["Node.js", "API Development", "Database Design", "Server Management"],
-      description: "Handles server-side logic, database operations, and API development"
+      skills: ["Node.js", "Database design", "API development", "Security"],
+      description: "Handles server-side logic, database, and API development"
     },
     {
-      role: "QA Engineer",
+      role: "UI/UX Designer",
       fteEstimate: 0.5,
-      skills: ["Testing Frameworks", "Automation", "Bug Tracking"],
-      description: "Ensures quality through comprehensive testing and bug identification"
+      skills: ["Figma", "User research", "Prototyping", "Design systems"],
+      description: "Creates user-centered designs and ensures optimal user experience"
     }
   ]
 
-  const sdlcMapping = "Agile methodology with 2-week sprints, daily standups, sprint planning, and retrospectives. Continuous integration and deployment with automated testing pipelines."
+  const sdlcMapping = "Agile Scrum methodology with 2-week sprints, daily standups, sprint retrospectives, continuous integration, and regular stakeholder demonstrations"
 
-  const qaApproach = "Multi-layered testing approach including unit tests (Jest), integration tests, end-to-end tests (Cypress), and manual testing for UX validation. Staged deployment with rollback capabilities."
+  const qaApproach = "Comprehensive testing strategy including unit tests (Jest), integration tests, end-to-end tests (Playwright/Cypress), and user acceptance testing with beta users"
 
   return {
     projectMilestones,
@@ -148,109 +211,100 @@ async function generateStage3Data(analysis: any) {
 }
 
 async function generateStage4Data(analysis: any) {
-  const techRoadmap = [
+  // Try AI generation first
+  try {
+    const prompt = `
+You are a senior solutions architect. Based on the following project analysis, create a detailed technology roadmap, version milestones, security considerations, and cost estimates.
+
+PROJECT ANALYSIS:
+${JSON.stringify(analysis, null, 2)}
+
+Return a JSON object with this structure:
+{
+  "techRoadmap": [
     {
-      category: "Infrastructure" as const,
-      technologies: ["AWS/Vercel", "Docker", "CI/CD Pipeline", "Load Balancing"],
-      timeline: "Week 1-2",
-      trl: 8
-    },
+      "category": "Infrastructure" | "Dev Stack" | "Integrations" | "Testing" | "Scalability",
+      "technologies": ["string"],
+      "timeline": "string",
+      "trl": number (1-9)
+    }
+  ],
+  "versionMilestones": [
     {
-      category: "Dev Stack" as const,
-      technologies: ["React/Next.js", "Node.js", "TypeScript", "Tailwind CSS"],
-      timeline: "Week 2-6",
-      trl: 9
-    },
+      "version": "string",
+      "features": ["string"],
+      "timeline": "string",
+      "description": "string"
+    }
+  ],
+  "securityConsiderations": [
     {
-      category: "Integrations" as const,
-      technologies: ["Payment APIs", "Authentication", "Third-party Services"],
-      timeline: "Week 4-8",
-      trl: 7
-    },
+      "area": "string",
+      "requirements": ["string"],
+      "compliance": ["string"]
+    }
+  ],
+  "costEstimates": [
     {
-      category: "Testing" as const,
-      technologies: ["Jest", "Cypress", "Storybook", "Testing Library"],
-      timeline: "Week 3-10",
-      trl: 8
-    },
-    {
-      category: "Scalability" as const,
-      technologies: ["Caching", "CDN", "Database Optimization", "Monitoring"],
-      timeline: "Week 8-12",
-      trl: 6
+      "category": "string",
+      "items": [{"name": "string", "cost": "string", "justification": "string"}],
+      "total": "string"
     }
   ]
+}
 
-  const versionMilestones = [
-    {
-      version: "v0.1 (MVP)",
-      features: ["Core functionality", "Basic UI", "User authentication", "Essential workflows"],
-      timeline: "Month 1-2",
-      description: "Minimum viable product for initial user testing and feedback collection"
-    },
-    {
-      version: "v1.0 (Launch)",
-      features: ["Full feature set", "Polished UI", "Performance optimization", "Security hardening"],
-      timeline: "Month 3-4",
-      description: "Production-ready version suitable for public launch"
-    },
-    {
-      version: "v2.0 (Scale)",
-      features: ["Advanced features", "Analytics dashboard", "Mobile optimization", "API integration"],
-      timeline: "Month 6-8",
-      description: "Enhanced version with scaling capabilities and advanced functionality"
+Guidelines:
+- Create 5 tech categories: Infrastructure, Dev Stack, Integrations, Testing, Scalability
+- TRL (Technology Readiness Level): 9 = proven technology, 7 = demonstration, 5 = validation
+- Version milestones: v0.1 (MVP), v1.0 (Launch), v2.0 (Scale)
+- Security areas should match the project's domain
+- Cost estimates should be realistic based on the project complexity`
+
+    const groq = createGroq({ apiKey: process.env.GROQ_API_KEY })
+    const { text } = await generateText({
+      model: groq("llama-3.1-8b-instant"),
+      prompt: prompt,
+      temperature: 0.2,
+    })
+
+    const cleanedText = text.trim()
+      .replace(/```json\s*/g, '').replace(/```\s*/g, '')
+    const aiData = JSON.parse(cleanedText)
+
+    if (aiData.techRoadmap && aiData.versionMilestones) {
+      return {
+        techRoadmap: aiData.techRoadmap,
+        versionMilestones: aiData.versionMilestones,
+        securityConsiderations: aiData.securityConsiderations || [
+          { area: "Authentication & Authorization", requirements: ["JWT tokens", "Password hashing"], compliance: ["GDPR"] }
+        ],
+        costEstimates: aiData.costEstimates || [
+          { category: "Development", items: [{ name: "Developer salaries", cost: "$8,000-12,000/month", justification: "2 developers for 3-4 months" }], total: "$25,000-50,000" }
+        ]
+      }
     }
-  ]
-
-  const securityConsiderations = [
-    {
-      area: "Authentication & Authorization",
-      requirements: ["JWT tokens", "Password hashing (bcrypt)", "Session management", "Role-based access"],
-      compliance: ["GDPR compliance", "Data encryption at rest", "Secure data transmission"]
-    },
-    {
-      area: "Data Protection",
-      requirements: ["Input validation", "SQL injection prevention", "XSS protection", "CSRF tokens"],
-      compliance: ["Privacy policy", "Data retention policies", "User consent management"]
-    }
-  ]
-
-  const costEstimates = [
-    {
-      category: "Development",
-      items: [
-        { name: "Developer salaries (2 devs)", cost: "$8,000-12,000/month", justification: "2 full-time developers for 3-4 months" },
-        { name: "Design and UX", cost: "$2,000-4,000", justification: "UI/UX design, prototyping, and user testing" },
-        { name: "Development tools", cost: "$200-400/month", justification: "IDEs, design tools, project management software" }
-      ],
-      total: "$25,000-50,000"
-    },
-    {
-      category: "Infrastructure",
-      items: [
-        { name: "Cloud hosting", cost: "$50-200/month", justification: "AWS/Vercel hosting, database, storage" },
-        { name: "Third-party services", cost: "$100-500/month", justification: "Payment processing, email services, analytics" },
-        { name: "Security & monitoring", cost: "$50-150/month", justification: "SSL certificates, monitoring tools, backup services" }
-      ],
-      total: "$600-2,400/year"
-    },
-    {
-      category: "Marketing & Launch",
-      items: [
-        { name: "Domain & branding", cost: "$500-1,500", justification: "Domain registration, logo design, brand materials" },
-        { name: "Marketing campaigns", cost: "$1,000-5,000", justification: "Initial marketing, social media, content creation" },
-        { name: "Legal & compliance", cost: "$1,000-3,000", justification: "Terms of service, privacy policy, legal review" }
-      ],
-      total: "$2,500-9,500"
-    }
-  ]
-
-  return {
-    techRoadmap,
-    versionMilestones,
-    securityConsiderations,
-    costEstimates
+  } catch (e) {
+    console.warn("AI generation for stage 4 failed, using fallback:", e)
   }
+
+  // Fallback
+  const techRoadmap = [
+    { category: "Infrastructure" as const, technologies: ["AWS/Vercel", "Docker", "CI/CD"], timeline: "Week 1-2", trl: 8 },
+    { category: "Dev Stack" as const, technologies: ["React", "Node.js", "PostgreSQL"], timeline: "Week 2-6", trl: 9 }
+  ]
+  const versionMilestones = [
+    { version: "v0.1 (MVP)", features: ["Core functionality", "Basic UI", "User authentication"], timeline: "Month 1-2", description: "Minimum viable product" },
+    { version: "v1.0 (Launch)", features: ["Full feature set", "Polished UI", "Performance optimization"], timeline: "Month 3-4", description: "Production-ready version" }
+  ]
+  const securityConsiderations = [
+    { area: "Authentication", requirements: ["JWT tokens", "Password hashing (bcrypt)", "Session management"], compliance: ["GDPR", "Data encryption"] }
+  ]
+  const costEstimates = [
+    { category: "Development", items: [{ name: "Developer salaries", cost: "$8,000-12,000/month", justification: "2 developers for 3-4 months" }], total: "$25,000-50,000" },
+    { category: "Infrastructure", items: [{ name: "Cloud hosting", cost: "$50-200/month", justification: "AWS/Vercel hosting" }], total: "$600-2,400/year" }
+  ]
+
+  return { techRoadmap, versionMilestones, securityConsiderations, costEstimates }
 }
 
 async function generateStage5Data(analysis: any) {

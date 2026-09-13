@@ -713,7 +713,29 @@ export default function AnalysisPage() {
     }
   }
 
-  // �🔥 STAGE 3: Load Roadmaps Data
+  const regenerateStage4 = async () => {
+    setLoading(true)
+    try {
+      const response = await fetch("/api/stage-data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stage: 4, analysis }),
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setStageData(prev => ({ ...prev, stage4: data }))
+      } else {
+        throw new Error("Failed to regenerate Stage 4")
+      }
+    } catch (error) {
+      console.error("[Regenerate] Stage 4 regeneration failed:", error)
+      alert("Failed to regenerate Stage 4. Please try again.")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 🔥 STAGE 3: Load Roadmaps Data
   const loadStage3Data = async () => {
     try {
       const response = await fetch("/api/stage-data", {
@@ -1444,6 +1466,20 @@ export default function AnalysisPage() {
                 >
                   <Edit3 className="w-4 h-4" />
                   Edit Prompt
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={regenerateStage4}
+                  disabled={loading}
+                  className="flex items-center gap-2"
+                >
+                  {loading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="w-4 h-4" />
+                  )}
+                  Regenerate
                 </Button>
               </div>
             </div>
