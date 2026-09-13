@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(responseData)
   } catch (error) {
-    console.error(`Stage ${request.json} data generation error:`, error)
+    console.error(`Stage ${stage} data generation error:`, error)
     return NextResponse.json({ error: "Failed to generate stage data" }, { status: 500 })
   }
 }

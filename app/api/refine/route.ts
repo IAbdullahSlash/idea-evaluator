@@ -16,7 +16,7 @@ You are an expert AI consultant specializing in project improvement. Based on th
 Current Project: ${projectTitle}
 Description: ${projectDescription}
 Current Feasibility Score: ${currentAnalysis.feasibilityScore}/10
-Current Challenges: ${currentAnalysis.potentialChallenges?.join(", ")}
+Current Challenges: ${Object.values(currentAnalysis.potentialChallenges || {}).join(", ")}
 
 Provide 5-7 specific improvement suggestions that could:
 1. Increase feasibility score

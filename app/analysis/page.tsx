@@ -325,6 +325,30 @@ export default function AnalysisPage() {
   })
   const [analyzing, setAnalyzing] = useState(false)
 
+  // 🚀 LOCAL STORAGE HYDRATION — restore progress after page refresh
+  useEffect(() => {
+    try {
+      const savedStage = localStorage.getItem("currentStage")
+      if (savedStage !== null) {
+        const stageNum = parseInt(savedStage, 10) as AnalysisStage
+        if (stageNum >= AnalysisStage.QUICK_SNAPSHOT) {
+          setCurrentStage(stageNum)
+        }
+      }
+      const savedAnalysis = localStorage.getItem("projectAnalysis")
+      if (savedAnalysis) {
+        const parsed = JSON.parse(savedAnalysis) as AnalysisData
+        setAnalysis(parsed)
+      }
+      const savedProgress = localStorage.getItem("taskProgress")
+      if (savedProgress) {
+        setTaskProgress(JSON.parse(savedProgress))
+      }
+    } catch (e) {
+      console.warn("Failed to restore from localStorage:", e)
+    }
+  }, [])
+
   // Navigation helper - go back one stage without clearing the prompt/idea
   const goToPreviousStage = () => {
     setCurrentStage(prev => {
@@ -337,14 +361,12 @@ export default function AnalysisPage() {
   const validateAnalysisData = (analysisData: any): AnalysisData => {
     // Add this safety check at the top of your component
     if (analysisData && (
-      !analysisData.honestAiFeedback || 
-      !analysisData.keyStrengths || 
-      !analysisData.potentialChallenges || 
+      !analysisData.honestAiFeedback ||
+      !analysisData.keyStrengths ||
+      !analysisData.potentialChallenges ||
       !analysisData.requirementsScope ||
       !analysisData.targetUsersMarketFit ||
-      !analysisData.techStack || 
-
-  
+      !analysisData.techStack ||
       !analysisData.roadmap ||
       !analysisData.recommendations ||
       !analysisData.similarProjects
