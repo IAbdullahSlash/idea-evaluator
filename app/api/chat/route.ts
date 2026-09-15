@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
     
     // Use the most basic model configuration
     const model = genAI.getGenerativeModel({ 
-      model: "gemini-2.5-flash"
+      model: "gemini-3.5-flash"
     })
 
     // Create a context-aware prompt

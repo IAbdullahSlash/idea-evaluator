@@ -13,7 +13,7 @@ export async function GET() {
 
     // Initialize Gemini AI with basic configuration
     const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" })
+    const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash" })
     
     // Test with a simple prompt
     const result = await model.generateContent("Say hello")
@@ -23,7 +23,7 @@ export async function GET() {
     return NextResponse.json({
       success: true,
       testResponse: text,
-      model: "gemini-2.5-flash",
+      model: "gemini-3.5-flash",
       message: 'API key is working correctly'
     })
 

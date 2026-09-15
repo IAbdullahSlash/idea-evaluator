@@ -1,0 +1,368 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "The Idea Evaluator — Architecture",
+    "quality_profile": "showcase",
+    "output": "idea-evaluator-architecture.html",
+    "viewBox": [
+      1500,
+      700
+    ]
+  },
+  "components": [
+    {
+      "id": "user",
+      "type": "external",
+      "label": "User",
+      "sublabel": "browser",
+      "pos": [
+        30,
+        60
+      ],
+      "size": [
+        100,
+        50
+      ]
+    },
+    {
+      "id": "nextjs",
+      "type": "frontend",
+      "label": "Next.js 14",
+      "sublabel": "app router",
+      "pos": [
+        200,
+        60
+      ],
+      "size": [
+        110,
+        50
+      ],
+      "tag": "framework"
+    },
+    {
+      "id": "theme",
+      "type": "frontend",
+      "label": "Theme",
+      "sublabel": "dark/light",
+      "pos": [
+        380,
+        60
+      ],
+      "size": [
+        100,
+        45
+      ]
+    },
+    {
+      "id": "ai-assistant",
+      "type": "frontend",
+      "label": "AI Chat",
+      "sublabel": "overlay",
+      "pos": [
+        560,
+        60
+      ],
+      "size": [
+        100,
+        45
+      ]
+    },
+    {
+      "id": "env",
+      "type": "security",
+      "label": "Secrets",
+      "sublabel": "env vars",
+      "pos": [
+        1300,
+        180
+      ],
+      "size": [
+        90,
+        45
+      ]
+    },
+    {
+      "id": "analyze-api",
+      "type": "backend",
+      "label": "analyze",
+      "sublabel": "POST /api/analyze",
+      "pos": [
+        200,
+        340
+      ],
+      "size": [
+        110,
+        45
+      ],
+      "tag": "primary"
+    },
+    {
+      "id": "chat-api",
+      "type": "backend",
+      "label": "chat",
+      "sublabel": "streaming",
+      "pos": [
+        420,
+        340
+      ],
+      "size": [
+        100,
+        45
+      ]
+    },
+    {
+      "id": "stage-api",
+      "type": "backend",
+      "label": "stage-data",
+      "sublabel": "POST /api/stage-data",
+      "pos": [
+        660,
+        340
+      ],
+      "size": [
+        120,
+        45
+      ]
+    },
+    {
+      "id": "research-api",
+      "type": "backend",
+      "label": "research",
+      "sublabel": "Scholar",
+      "pos": [
+        900,
+        340
+      ],
+      "size": [
+        100,
+        45
+      ]
+    },
+    {
+      "id": "search-api",
+      "type": "backend",
+      "label": "google-search",
+      "sublabel": "CSE",
+      "pos": [
+        1120,
+        340
+      ],
+      "size": [
+        120,
+        45
+      ]
+    },
+    {
+      "id": "github-api",
+      "type": "backend",
+      "label": "github-repos",
+      "sublabel": "GitHub",
+      "pos": [
+        1300,
+        340
+      ],
+      "size": [
+        110,
+        45
+      ]
+    },
+    {
+      "id": "gemini",
+      "type": "external",
+      "label": "Gemini API",
+      "sublabel": "1.5-flash",
+      "pos": [
+        200,
+        540
+      ],
+      "size": [
+        100,
+        45
+      ],
+      "tag": "primary AI"
+    },
+    {
+      "id": "groq",
+      "type": "external",
+      "label": "Groq",
+      "sublabel": "llama",
+      "pos": [
+        660,
+        540
+      ],
+      "size": [
+        100,
+        45
+      ]
+    },
+    {
+      "id": "thirdparty",
+      "type": "external",
+      "label": "Third-Party",
+      "sublabel": "Scholar·Google·GH",
+      "pos": [
+        1000,
+        540
+      ],
+      "size": [
+        120,
+        45
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "security-group",
+      "label": "Client",
+      "wraps": [
+        "user",
+        "nextjs",
+        "theme",
+        "ai-assistant"
+      ],
+      "pad": 16
+    },
+    {
+      "kind": "security-group",
+      "label": "Server",
+      "wraps": [
+        "env",
+        "analyze-api",
+        "chat-api",
+        "stage-api",
+        "research-api",
+        "search-api",
+        "github-api"
+      ],
+      "pad": 16
+    },
+    {
+      "kind": "region",
+      "label": "External",
+      "wraps": [
+        "gemini",
+        "groq",
+        "thirdparty"
+      ],
+      "pad": 12
+    }
+  ],
+  "connections": [
+    {
+      "from": "user",
+      "to": "nextjs",
+      "label": "HTTP",
+      "variant": "emphasis"
+    },
+    {
+      "from": "nextjs",
+      "to": "analyze-api",
+      "label": "analyze",
+      "variant": "emphasis",
+      "labelDy": 24
+    },
+    {
+      "from": "nextjs",
+      "to": "chat-api",
+      "label": "chat",
+      "variant": "dashed"
+    },
+    {
+      "from": "nextjs",
+      "to": "stage-api",
+      "label": "stage",
+      "variant": "dashed"
+    },
+    {
+      "from": "analyze-api",
+      "to": "gemini",
+      "label": "feasibility",
+      "variant": "emphasis"
+    },
+    {
+      "from": "chat-api",
+      "to": "gemini",
+      "label": "stream",
+      "variant": "dashed"
+    },
+    {
+      "from": "stage-api",
+      "to": "groq",
+      "label": "llama",
+      "variant": "dashed"
+    },
+    {
+      "from": "stage-api",
+      "to": "research-api",
+      "label": "papers",
+      "variant": "dashed"
+    },
+    {
+      "from": "research-api",
+      "to": "thirdparty",
+      "label": "Scholar",
+      "variant": "dashed"
+    },
+    {
+      "from": "search-api",
+      "to": "thirdparty",
+      "label": "CSE",
+      "variant": "dashed"
+    },
+    {
+      "from": "github-api",
+      "to": "thirdparty",
+      "label": "GH",
+      "variant": "dashed"
+    },
+    {
+      "from": "env",
+      "to": "analyze-api",
+      "label": "GEMINI_KEY",
+      "variant": "security"
+    },
+    {
+      "from": "env",
+      "to": "chat-api",
+      "label": "GEMINI_KEY",
+      "variant": "security"
+    },
+    {
+      "from": "env",
+      "to": "stage-api",
+      "label": "GROQ_KEY",
+      "variant": "security"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Primary Path",
+      "items": [
+        "User enters idea → POST /api/analyze",
+        "Gemini returns feasibility analysis",
+        "Stage progression → stage-data (Groq)",
+        "Final result to user"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "AI Models",
+      "items": [
+        "Gemini handles analyze + chat",
+        "Groq handles stage-data",
+        "Server-side only, keys in env"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Trust",
+      "items": [
+        "API keys server-side only",
+        "All LLM calls proxied",
+        "Client gets JSON only"
+      ]
+    }
+  ]
+}
