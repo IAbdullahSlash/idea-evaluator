@@ -322,7 +322,11 @@ export default function AnalysisPage() {
 
   // Simplified form data - only idea description needed
   const [formData, setFormData] = useState({
-    idea: ""
+    idea: '',
+    domain: '',
+    projectType: '',
+    experience: '',
+    timeline: '',
   })
   const [analyzing, setAnalyzing] = useState(false)
 
@@ -464,18 +468,56 @@ export default function AnalysisPage() {
     return []
   }
 
+  // 🛡️ CLIENT-SIDE INTENT GUARDRAILS
+  const validateClientIntent = (idea: string): string | null => {
+    const trimmed = idea.trim()
+    if (trimmed.length < 15) return 'Idea is too short — please describe your project concept in more detail (at least 15 characters).'
+
+    const words = trimmed.toLowerCase().match(/\b[a-z]+\b/g) || []
+    if (words.length < 2) return 'Not enough meaningful content to analyze.'
+
+    const gibberishRatio = words.filter(w => w.length <= 2).length / words.length
+    if (gibberishRatio > 0.6) return 'Your input looks like gibberish or random text — please describe a real project idea.'
+
+    const spamPatterns = [
+      /https?:\/\/\S+/i,
+      /bitcoin|crypto|invest now|get rich|earn money/i,
+      /^[a-z0-9]{10,}$/i,
+      /(.)\1{4,}/i,
+    ]
+    for (const pattern of spamPatterns) {
+      if (pattern.test(trimmed)) return 'Please describe a real project idea — spam or unrelated content detected.'
+    }
+
+    return null
+  }
+
   // 🚀 STAGE 1: QUICK SNAPSHOT
   const handleAnalyzeIdea = async (e?: React.FormEvent) => {
     if (e) e.preventDefault()
-    
+
     if (!formData.idea.trim()) return
+
+    // 🛡️ Client-side guardrail check
+    const clientError = validateClientIntent(formData.idea)
+    if (clientError) {
+      alert(clientError)
+      return
+    }
 
     setAnalyzing(true)
     try {
       const response = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idea: formData.idea, stage: 'stage1' }),
+        body: JSON.stringify({
+          idea: formData.idea,
+          stage: 'stage1',
+          domain: formData.domain,
+          projectType: formData.projectType,
+          experience: formData.experience,
+          timeline: formData.timeline,
+        }),
       })
 
       if (response.ok) {
@@ -505,6 +547,9 @@ export default function AnalysisPage() {
         
         // Move to Stage 1
         setCurrentStage(AnalysisStage.QUICK_SNAPSHOT)
+      } else if (response.status === 422) {
+        const errorData = await response.json().catch(() => null)
+        alert(errorData?.error || 'Your input did not pass validation. Please check your idea description.')
       } else {
         const errorText = await response.text()
         alert(`Failed to generate analysis. Status: ${response.status}`)
@@ -877,11 +922,84 @@ export default function AnalysisPage() {
       <CardHeader className="text-center pb-4">
         <CardTitle className="text-2xl">Analyze Your Project Idea</CardTitle>
         <CardDescription>
-          Describe your project concept - our AI will provide progressive analysis across 5 detailed stages
+          Tell us about your project — structured context helps the AI give sharper analysis
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-4">
         <form onSubmit={handleAnalyzeIdea} className="space-y-4">
+          {/* Structured intake fields */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <Label htmlFor="domain">Domain</Label>
+              <select
+                id="domain"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                value={formData.domain}
+                onChange={(e) => setFormData(prev => ({ ...prev, domain: e.target.value }))}
+              >
+                <option value="">Select domain...</option>
+                <option value="AI/ML">AI / Machine Learning</option>
+                <option value="FinTech">FinTech</option>
+                <option value="EdTech">EdTech</option>
+                <option value="HealthTech">HealthTech</option>
+                <option value="E-commerce">E-commerce</option>
+                <option value="SaaS">SaaS</option>
+                <option value="Social">Social</option>
+                <option value="Gaming">Gaming</option>
+                <option value="Productivity">Productivity</option>
+                <option value="IoT">IoT</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="projectType">Project Type</Label>
+              <select
+                id="projectType"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                value={formData.projectType}
+                onChange={(e) => setFormData(prev => ({ ...prev, projectType: e.target.value }))}
+              >
+                <option value="">Select type...</option>
+                <option value="MVP">MVP</option>
+                <option value="Full Product">Full Product</option>
+                <option value="Prototype">Prototype</option>
+                <option value="API/Service">API / Service</option>
+                <option value="Mobile App">Mobile App</option>
+                <option value="Web App">Web App</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="experience">Your Experience Level</Label>
+              <select
+                id="experience"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                value={formData.experience}
+                onChange={(e) => setFormData(prev => ({ ...prev, experience: e.target.value }))}
+              >
+                <option value="">Select level...</option>
+                <option value="Beginner">Beginner</option>
+                <option value="Intermediate">Intermediate</option>
+                <option value="Advanced">Advanced</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="timeline">Expected Timeline</Label>
+              <select
+                id="timeline"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                value={formData.timeline}
+                onChange={(e) => setFormData(prev => ({ ...prev, timeline: e.target.value }))}
+              >
+                <option value="">Select timeline...</option>
+                <option value="1-2 weeks">1-2 weeks</option>
+                <option value="1-2 months">1-2 months</option>
+                <option value="3-6 months">3-6 months</option>
+                <option value="6+ months">6+ months</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Idea textarea */}
           <div className="space-y-2">
             <Label htmlFor="project-idea">Project Idea</Label>
             <Textarea

@@ -15,16 +15,24 @@
       "id": "user",
       "type": "external",
       "label": "User",
-      "sublabel": "browser",
+      "sublabel": "structured intake",
       "pos": [30, 60],
       "size": [100, 50]
+    },
+    {
+      "id": "intake",
+      "type": "frontend",
+      "label": "Intake",
+      "sublabel": "domain·type·exp·timeline",
+      "pos": [220, 60],
+      "size": [110, 50]
     },
     {
       "id": "nextjs",
       "type": "frontend",
       "label": "Next.js 14",
       "sublabel": "app router",
-      "pos": [220, 60],
+      "pos": [420, 60],
       "size": [110, 50],
       "tag": "framework"
     },
@@ -33,7 +41,7 @@
       "type": "frontend",
       "label": "Theme",
       "sublabel": "dark/light",
-      "pos": [420, 60],
+      "pos": [620, 60],
       "size": [100, 45]
     },
     {
@@ -41,7 +49,7 @@
       "type": "frontend",
       "label": "AI Chat",
       "sublabel": "overlay",
-      "pos": [620, 60],
+      "pos": [820, 60],
       "size": [100, 45]
     },
     {
@@ -131,7 +139,7 @@
     {
       "kind": "security-group",
       "label": "Client",
-      "wraps": ["user", "nextjs", "theme", "ai-assistant"],
+      "wraps": ["user", "intake", "nextjs", "theme", "ai-assistant"],
       "pad": 16
     },
     {
@@ -150,8 +158,14 @@
   "connections": [
     {
       "from": "user",
+      "to": "intake",
+      "label": "submit",
+      "variant": "emphasis"
+    },
+    {
+      "from": "intake",
       "to": "nextjs",
-      "label": "HTTP",
+      "label": "context + idea",
       "variant": "emphasis"
     },
     {
@@ -252,7 +266,8 @@
       "dot": "cyan",
       "title": "Primary Path",
       "items": [
-        "User enters idea → POST /api/analyze",
+        "User fills structured intake → domain, type, exp, timeline",
+        "POST /api/analyze with full context",
         "Gemini returns feasibility analysis",
         "Stage progression → stage-data (Groq)",
         "Final result to user"

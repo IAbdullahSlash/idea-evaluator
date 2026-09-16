@@ -12,11 +12,52 @@ function getGenerativeModel(apiKey: string) {
   return genAI.getGenerativeModel({ model: 'gemini-3.5-flash' })
 }
 
+// 🛡️ INTENT VALIDATION — server-side guardrails
+function validateIntent(idea: string): { valid: boolean; reason?: string } {
+  const trimmed = idea.trim()
+
+  if (trimmed.length < 15) {
+    return { valid: false, reason: 'Idea is too short — please describe your project concept in more detail (at least 15 characters).' }
+  }
+
+  const words = trimmed.toLowerCase().match(/\b[a-z]+\b/g) || []
+  if (words.length < 2) {
+    return { valid: false, reason: 'Not enough meaningful content to analyze. Please describe your project idea.' }
+  }
+
+  const gibberishRatio = words.filter(w => w.length <= 2).length / words.length
+  if (gibberishRatio > 0.6) {
+    return { valid: false, reason: 'Your input looks like gibberish or random text. Please describe a real project idea.' }
+  }
+
+  const spamPatterns = [
+    /https?:\/\/\S+/i,
+    /bitcoin|crypto|invest now|get rich|earn money/i,
+    /^[a-z0-9]{10,}$/i,
+    /(.)\\1{4,}/,
+  ]
+  for (const pattern of spamPatterns) {
+    if (pattern.test(trimmed)) {
+      return { valid: false, reason: 'Please describe a real project idea — spam or unrelated content detected.' }
+    }
+  }
+
+  return { valid: true }
+}
+
 // 🚀 STAGE-SPECIFIC PROMPTS
 const stagePrompts: Record<string, string> = {
   stage1: `You are a senior technical consultant providing an honest reality check for a project idea.
 
 PROJECT TO ANALYZE: "{idea}"
+
+CONTEXT PROVIDED BY DEVELOPER:
+- Domain: {domain}
+- Project Type: {projectType}
+- Experience Level: {experience}
+- Expected Timeline: {timeline}
+
+Use the above context to sharpen your assessment. If no context was provided, analyze the idea generically.
 
 You must provide a concise but comprehensive assessment focusing on three key areas:
 
@@ -177,13 +218,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Idea is required' }, { status: 400 })
     }
 
+    // 🛡️ SERVER-SIDE INTENT GUARDRAILS
+    const guardrailCheck = validateIntent(idea)
+    if (!guardrailCheck.valid) {
+      return NextResponse.json(
+        { error: guardrailCheck.reason },
+        { status: 422 }
+      )
+    }
+
     // 🚀 EXTRA CONTEXT FROM FRONTEND
     const extraContext = [domain, projectType, experience, timeline].filter(Boolean).join(', ')
     const contextPrefix = extraContext ? `${idea} (Domain: ${extraContext})` : idea
 
-    // 🚀 Select prompt and inject idea
+    // 🚀 Select prompt and inject idea + context placeholders
     const selectedPrompt = stagePrompts[stage] || stagePrompts.stage1
-    const promptWithContext = selectedPrompt.replace('{idea}', contextPrefix)
+    const promptWithContext = selectedPrompt
+      .replace('{idea}', contextPrefix)
+      .replace('{domain}', domain || 'Not specified')
+      .replace('{projectType}', projectType || 'Not specified')
+      .replace('{experience}', experience || 'Not specified')
+      .replace('{timeline}', timeline || 'Not specified')
 
     // 🚀 Try each Gemini API key until one works
     const apiKeys = getGeminiKeys()
