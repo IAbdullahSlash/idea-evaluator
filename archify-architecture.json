@@ -16,28 +16,16 @@
       "type": "external",
       "label": "User",
       "sublabel": "browser",
-      "pos": [
-        30,
-        60
-      ],
-      "size": [
-        100,
-        50
-      ]
+      "pos": [30, 60],
+      "size": [100, 50]
     },
     {
       "id": "nextjs",
       "type": "frontend",
       "label": "Next.js 14",
       "sublabel": "app router",
-      "pos": [
-        200,
-        60
-      ],
-      "size": [
-        110,
-        50
-      ],
+      "pos": [220, 60],
+      "size": [110, 50],
       "tag": "framework"
     },
     {
@@ -45,56 +33,32 @@
       "type": "frontend",
       "label": "Theme",
       "sublabel": "dark/light",
-      "pos": [
-        380,
-        60
-      ],
-      "size": [
-        100,
-        45
-      ]
+      "pos": [420, 60],
+      "size": [100, 45]
     },
     {
       "id": "ai-assistant",
       "type": "frontend",
       "label": "AI Chat",
       "sublabel": "overlay",
-      "pos": [
-        560,
-        60
-      ],
-      "size": [
-        100,
-        45
-      ]
+      "pos": [620, 60],
+      "size": [100, 45]
     },
     {
       "id": "env",
       "type": "security",
       "label": "Secrets",
       "sublabel": "env vars",
-      "pos": [
-        1300,
-        180
-      ],
-      "size": [
-        90,
-        45
-      ]
+      "pos": [138, 120],
+      "size": [90, 45]
     },
     {
       "id": "analyze-api",
       "type": "backend",
       "label": "analyze",
       "sublabel": "POST /api/analyze",
-      "pos": [
-        200,
-        340
-      ],
-      "size": [
-        110,
-        45
-      ],
+      "pos": [220, 380],
+      "size": [110, 45],
       "tag": "primary"
     },
     {
@@ -102,84 +66,48 @@
       "type": "backend",
       "label": "chat",
       "sublabel": "streaming",
-      "pos": [
-        420,
-        340
-      ],
-      "size": [
-        100,
-        45
-      ]
+      "pos": [420, 380],
+      "size": [100, 45]
     },
     {
       "id": "stage-api",
       "type": "backend",
       "label": "stage-data",
       "sublabel": "POST /api/stage-data",
-      "pos": [
-        660,
-        340
-      ],
-      "size": [
-        120,
-        45
-      ]
+      "pos": [620, 380],
+      "size": [120, 45]
     },
     {
       "id": "research-api",
       "type": "backend",
       "label": "research",
       "sublabel": "Scholar",
-      "pos": [
-        900,
-        340
-      ],
-      "size": [
-        100,
-        45
-      ]
+      "pos": [840, 380],
+      "size": [100, 45]
     },
     {
       "id": "search-api",
       "type": "backend",
       "label": "google-search",
       "sublabel": "CSE",
-      "pos": [
-        1120,
-        340
-      ],
-      "size": [
-        120,
-        45
-      ]
+      "pos": [1060, 380],
+      "size": [120, 45]
     },
     {
       "id": "github-api",
       "type": "backend",
       "label": "github-repos",
       "sublabel": "GitHub",
-      "pos": [
-        1300,
-        340
-      ],
-      "size": [
-        110,
-        45
-      ]
+      "pos": [1280, 380],
+      "size": [110, 45]
     },
     {
       "id": "gemini",
       "type": "external",
       "label": "Gemini API",
       "sublabel": "1.5-flash",
-      "pos": [
-        200,
-        540
-      ],
-      "size": [
-        100,
-        45
-      ],
+      "pos": [300, 540],
+      "size": [100, 45],
       "tag": "primary AI"
     },
     {
@@ -187,64 +115,35 @@
       "type": "external",
       "label": "Groq",
       "sublabel": "llama",
-      "pos": [
-        660,
-        540
-      ],
-      "size": [
-        100,
-        45
-      ]
+      "pos": [700, 540],
+      "size": [100, 45]
     },
     {
       "id": "thirdparty",
       "type": "external",
       "label": "Third-Party",
       "sublabel": "Scholar·Google·GH",
-      "pos": [
-        1000,
-        540
-      ],
-      "size": [
-        120,
-        45
-      ]
+      "pos": [1060, 540],
+      "size": [120, 45]
     }
   ],
   "boundaries": [
     {
       "kind": "security-group",
       "label": "Client",
-      "wraps": [
-        "user",
-        "nextjs",
-        "theme",
-        "ai-assistant"
-      ],
+      "wraps": ["user", "nextjs", "theme", "ai-assistant"],
       "pad": 16
     },
     {
       "kind": "security-group",
       "label": "Server",
-      "wraps": [
-        "env",
-        "analyze-api",
-        "chat-api",
-        "stage-api",
-        "research-api",
-        "search-api",
-        "github-api"
-      ],
+      "wraps": ["env", "analyze-api", "chat-api", "stage-api", "research-api", "search-api", "github-api"],
       "pad": 16
     },
     {
       "kind": "region",
       "label": "External",
-      "wraps": [
-        "gemini",
-        "groq",
-        "thirdparty"
-      ],
+      "wraps": ["gemini", "groq", "thirdparty"],
       "pad": 12
     }
   ],
@@ -272,13 +171,19 @@
       "from": "nextjs",
       "to": "stage-api",
       "label": "stage",
-      "variant": "dashed"
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "left",
+      "via": [[680, 85], [680, 402]]
     },
     {
       "from": "analyze-api",
       "to": "gemini",
       "label": "feasibility",
-      "variant": "emphasis"
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "top",
+      "via": [[340, 402], [340, 540]]
     },
     {
       "from": "chat-api",
@@ -290,7 +195,10 @@
       "from": "stage-api",
       "to": "groq",
       "label": "llama",
-      "variant": "dashed"
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "top",
+      "via": [[760, 402], [760, 540]]
     },
     {
       "from": "stage-api",
@@ -308,7 +216,8 @@
       "from": "search-api",
       "to": "thirdparty",
       "label": "CSE",
-      "variant": "dashed"
+      "variant": "dashed",
+      "labelDy": 20
     },
     {
       "from": "github-api",
@@ -320,7 +229,10 @@
       "from": "env",
       "to": "analyze-api",
       "label": "GEMINI_KEY",
-      "variant": "security"
+      "variant": "security",
+      "fromSide": "right",
+      "toSide": "left",
+      "via": [[275, 142], [275, 402]]
     },
     {
       "from": "env",
