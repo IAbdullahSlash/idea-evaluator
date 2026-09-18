@@ -11,6 +11,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { SelectionTooltip } from "@/components/SelectionTooltip"
 import { useAIAssistant } from "@/contexts/AIAssistantContext"
+import { validateIdea } from "@/lib/validation"
+import { fetchWithFallback } from "@/lib/fetch-with-fallback"
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import {
@@ -107,7 +109,6 @@ interface AnalysisData {
   // EXISTING FIELDS
   detectedDomain: string
   requiredExperience: string
-  estimatedTimeline: string
   techStack: {
     frontend: string[]
     backend: string[]
@@ -468,29 +469,7 @@ export default function AnalysisPage() {
     return []
   }
 
-  // 🛡️ CLIENT-SIDE INTENT GUARDRAILS
-  const validateClientIntent = (idea: string): string | null => {
-    const trimmed = idea.trim()
-    if (trimmed.length < 15) return 'Idea is too short — please describe your project concept in more detail (at least 15 characters).'
-
-    const words = trimmed.toLowerCase().match(/\b[a-z]+\b/g) || []
-    if (words.length < 2) return 'Not enough meaningful content to analyze.'
-
-    const gibberishRatio = words.filter(w => w.length <= 2).length / words.length
-    if (gibberishRatio > 0.6) return 'Your input looks like gibberish or random text — please describe a real project idea.'
-
-    const spamPatterns = [
-      /https?:\/\/\S+/i,
-      /bitcoin|crypto|invest now|get rich|earn money/i,
-      /^[a-z0-9]{10,}$/i,
-      /(.)\1{4,}/i,
-    ]
-    for (const pattern of spamPatterns) {
-      if (pattern.test(trimmed)) return 'Please describe a real project idea — spam or unrelated content detected.'
-    }
-
-    return null
-  }
+  // 🛡️ Client-side guardrail check is handled by validateIdea (imported from lib/validation)
 
   // 🚀 STAGE 1: QUICK SNAPSHOT
   const handleAnalyzeIdea = async (e?: React.FormEvent) => {
@@ -498,8 +477,8 @@ export default function AnalysisPage() {
 
     if (!formData.idea.trim()) return
 
-    // 🛡️ Client-side guardrail check
-    const clientError = validateClientIntent(formData.idea)
+    // 🛡️ Client-side guardrail check (validateIdea is shared with the server)
+    const clientError = validateIdea(formData.idea)
     if (clientError) {
       alert(clientError)
       return
@@ -594,73 +573,36 @@ export default function AnalysisPage() {
 
   // 🔥 STAGE 2: Load Executive Summary Data
   const loadStage2Data = async () => {
-    try {
-      // 🚀 Get Stage 2 Analysis Data  
-      const analysisResponse = await fetch("/api/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idea: formData.idea, stage: 'stage2' }),
-      })
+    let stage2Analysis = null
+    const analysisResponse = await fetch("/api/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ idea: formData.idea, stage: 'stage2' }),
+    })
+    if (analysisResponse.ok) {
+      stage2Analysis = await analysisResponse.json()
+    }
 
-      let stage2Analysis = null
-      if (analysisResponse.ok) {
-        stage2Analysis = await analysisResponse.json()
-      }
-
-      // 🚀 Get Stage 2 Content Data
-      const response = await fetch("/api/stage-data", {
+    const stage2Data = await fetchWithFallback(
+      () => fetch("/api/stage-data", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ stage: 2, analysis, idea: formData.idea }),
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        const repos = await fetchGitHubRepos(analysis?.projectTitle || formData.idea)
-        
-        setStageData(prev => ({
-          ...prev,
-          stage2: { 
-            ...data, 
-            githubRepos: repos,
-            analysis: stage2Analysis // Add stage2-specific analysis
-          }
-        }))
-      } else {
-        // Fallback to local generation
-        const [quickWins, expertArticles, existingSolutions, repos] = await Promise.all([
-          generateQuickWins(),
-          fetchExpertArticles(),
-          fetchExistingSolutions(),
-          fetchGitHubRepos(analysis?.projectTitle || formData.idea)
+      }),
+      async () => {
+        const [quickWins, expertArticles, existingSolutions] = await Promise.all([
+          generateQuickWins(), fetchExpertArticles(), fetchExistingSolutions()
         ])
+        return { quickWins, expertArticles, existingSolutions, githubRepos: [] }
+      },
+      "Stage 2 content"
+    )
+    const repos = await fetchGitHubRepos(analysis?.projectTitle || formData.idea)
 
-        setStageData(prev => ({
-          ...prev,
-          stage2: { 
-            quickWins, 
-            expertArticles, 
-            existingSolutions, 
-            githubRepos: repos,
-            analysis: stage2Analysis // Add stage2-specific analysis even in fallback
-          }
-        }))
-      }
-    } catch (error) {
-      console.error("Failed to load Stage 2 data:", error)
-      // Fallback to local generation
-      const [quickWins, expertArticles, existingSolutions, repos] = await Promise.all([
-        generateQuickWins(),
-        fetchExpertArticles(),
-        fetchExistingSolutions(),
-        fetchGitHubRepos(analysis?.projectTitle || formData.idea)
-      ])
-
-      setStageData(prev => ({
-        ...prev,
-        stage2: { quickWins, expertArticles, existingSolutions, githubRepos: repos }
-      }))
-    }
+    setStageData(prev => ({
+      ...prev,
+      stage2: { ...stage2Data, githubRepos: repos, analysis: stage2Analysis }
+    }))
   }
 
   // REGENERATE FUNCTIONS
@@ -782,119 +724,59 @@ export default function AnalysisPage() {
 
   // 🔥 STAGE 3: Load Roadmaps Data
   const loadStage3Data = async () => {
-    try {
-      const response = await fetch("/api/stage-data", {
+    const stage3Data = await fetchWithFallback(
+      () => fetch("/api/stage-data", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ stage: 3, analysis }),
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        setStageData(prev => ({ ...prev, stage3: data }))
-      } else {
-        // Fallback to local generation
-        const projectMilestones = generateProjectMilestones()
-        const teamRoles = generateTeamRoles()
-        const sdlcMapping = generateSDLCMapping()
-        const qaApproach = generateQAApproach()
-
-        setStageData(prev => ({
-          ...prev,
-          stage3: { projectMilestones, teamRoles, sdlcMapping, qaApproach }
-        }))
-      }
-    } catch (error) {
-      console.error("Failed to load Stage 3 data:", error)
-      // Fallback to local generation
-      const projectMilestones = generateProjectMilestones()
-      const teamRoles = generateTeamRoles()
-      const sdlcMapping = generateSDLCMapping()
-      const qaApproach = generateQAApproach()
-
-      setStageData(prev => ({
-        ...prev,
-        stage3: { projectMilestones, teamRoles, sdlcMapping, qaApproach }
-      }))
-    }
+      }),
+      async () => ({
+        projectMilestones: generateProjectMilestones(),
+        teamRoles: generateTeamRoles(),
+        sdlcMapping: generateSDLCMapping(),
+        qaApproach: generateQAApproach(),
+      }),
+      "Stage 3 data"
+    )
+    setStageData(prev => ({ ...prev, stage3: stage3Data }))
   }
 
   // 🔥 STAGE 4: Load Technology Roadmap Data
   const loadStage4Data = async () => {
-    try {
-      const response = await fetch("/api/stage-data", {
+    const stage4Data = await fetchWithFallback(
+      () => fetch("/api/stage-data", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ stage: 4, analysis }),
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        setStageData(prev => ({ ...prev, stage4: data }))
-      } else {
-        // Fallback to local generation
-        const techRoadmap = generateTechRoadmap()
-        const versionMilestones = generateVersionMilestones()
-        const securityConsiderations = generateSecurityConsiderations()
-        const costEstimates = generateCostEstimates()
-
-        setStageData(prev => ({
-          ...prev,
-          stage4: { techRoadmap, versionMilestones, securityConsiderations, costEstimates }
-        }))
-      }
-    } catch (error) {
-      console.error("Failed to load Stage 4 data:", error)
-      // Fallback to local generation
-      const techRoadmap = generateTechRoadmap()
-      const versionMilestones = generateVersionMilestones()
-      const securityConsiderations = generateSecurityConsiderations()
-      const costEstimates = generateCostEstimates()
-
-      setStageData(prev => ({
-        ...prev,
-        stage4: { techRoadmap, versionMilestones, securityConsiderations, costEstimates }
-      }))
-    }
+      }),
+      async () => ({
+        techRoadmap: generateTechRoadmap(),
+        versionMilestones: generateVersionMilestones(),
+        securityConsiderations: generateSecurityConsiderations(),
+        costEstimates: generateCostEstimates(),
+      }),
+      "Stage 4 data"
+    )
+    setStageData(prev => ({ ...prev, stage4: stage4Data }))
   }
 
-  // 🔥 STAGE 5: Load Deep Resources Data  
+  // 🔥 STAGE 5: Load Deep Resources Data
   const loadStage5Data = async () => {
-    try {
-      const response = await fetch("/api/stage-data", {
+    const stage5Data = await fetchWithFallback(
+      () => fetch("/api/stage-data", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ stage: 5, analysis }),
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        setStageData(prev => ({ ...prev, stage5: data }))
-      } else {
-        // Fallback to local generation
-        const jiraIntegration = false
-        const shareableLink = generateShareableLink()
-        const freelancerLinks = generateFreelancerLinks()
-        const srsDocument = null
-
-        setStageData(prev => ({
-          ...prev,
-          stage5: { jiraIntegration, shareableLink, freelancerLinks, srsDocument }
-        }))
-      }
-    } catch (error) {
-      console.error("Failed to load Stage 5 data:", error)
-      // Fallback to local generation
-      const jiraIntegration = false
-      const shareableLink = generateShareableLink()
-      const freelancerLinks = generateFreelancerLinks()
-      const srsDocument = null
-
-      setStageData(prev => ({
-        ...prev,
-        stage5: { jiraIntegration, shareableLink, freelancerLinks, srsDocument }
-      }))
-    }
+      }),
+      async () => ({
+        jiraIntegration: false,
+        shareableLink: generateShareableLink(),
+        freelancerLinks: generateFreelancerLinks(),
+        srsDocument: null,
+      }),
+      "Stage 5 data"
+    )
+    setStageData(prev => ({ ...prev, stage5: stage5Data }))
   }
 
   // 🎨 STAGE RENDERING COMPONENTS

@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { type NextRequest, NextResponse } from 'next/server'
+import { validateIdea } from '@/lib/validation'
 
 function getGeminiKeys(): string[] {
   const key1 = process.env.GEMINI_API_KEY
@@ -12,38 +13,7 @@ function getGenerativeModel(apiKey: string) {
   return genAI.getGenerativeModel({ model: 'gemini-3.5-flash' })
 }
 
-// 🛡️ INTENT VALIDATION — server-side guardrails
-function validateIntent(idea: string): { valid: boolean; reason?: string } {
-  const trimmed = idea.trim()
-
-  if (trimmed.length < 15) {
-    return { valid: false, reason: 'Idea is too short — please describe your project concept in more detail (at least 15 characters).' }
-  }
-
-  const words = trimmed.toLowerCase().match(/\b[a-z]+\b/g) || []
-  if (words.length < 2) {
-    return { valid: false, reason: 'Not enough meaningful content to analyze. Please describe your project idea.' }
-  }
-
-  const gibberishRatio = words.filter(w => w.length <= 2).length / words.length
-  if (gibberishRatio > 0.6) {
-    return { valid: false, reason: 'Your input looks like gibberish or random text. Please describe a real project idea.' }
-  }
-
-  const spamPatterns = [
-    /https?:\/\/\S+/i,
-    /bitcoin|crypto|invest now|get rich|earn money/i,
-    /^[a-z0-9]{10,}$/i,
-    /(.)\\1{4,}/,
-  ]
-  for (const pattern of spamPatterns) {
-    if (pattern.test(trimmed)) {
-      return { valid: false, reason: 'Please describe a real project idea — spam or unrelated content detected.' }
-    }
-  }
-
-  return { valid: true }
-}
+// Intent validation is shared via lib/validation.ts (see validateIdea).
 
 // 🚀 STAGE-SPECIFIC PROMPTS
 const stagePrompts: Record<string, string> = {
@@ -219,12 +189,9 @@ export async function POST(request: NextRequest) {
     }
 
     // 🛡️ SERVER-SIDE INTENT GUARDRAILS
-    const guardrailCheck = validateIntent(idea)
-    if (!guardrailCheck.valid) {
-      return NextResponse.json(
-        { error: guardrailCheck.reason },
-        { status: 422 }
-      )
+    const guardrailError = validateIdea(idea)
+    if (guardrailError) {
+      return NextResponse.json({ error: guardrailError }, { status: 422 })
     }
 
     // 🚀 EXTRA CONTEXT FROM FRONTEND
