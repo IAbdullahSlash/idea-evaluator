@@ -310,3 +310,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to analyze project idea' }, { status: 500 })
   }
 }
+

@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from "next/server"
 
-const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY
-const SEARCH_ENGINE_ID = process.env.GOOGLE_SEARCH_ENGINE_ID
-
-if (!GOOGLE_API_KEY || !SEARCH_ENGINE_ID) {
-  throw new Error("Missing Google API credentials. Set GOOGLE_API_KEY and GOOGLE_SEARCH_ENGINE_ID in environment variables.")
-}
-
 export async function POST(request: NextRequest) {
+  const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY
+  const SEARCH_ENGINE_ID = process.env.GOOGLE_SEARCH_ENGINE_ID
+
+  if (!GOOGLE_API_KEY || !SEARCH_ENGINE_ID) {
+    return NextResponse.json({
+      error: "Missing Google API credentials. Set GOOGLE_API_KEY and GOOGLE_SEARCH_ENGINE_ID in environment variables.",
+      existingSolutions: []
+    }, { status: 200 })
+  }
+
   try {
     const { idea } = await request.json()
 
