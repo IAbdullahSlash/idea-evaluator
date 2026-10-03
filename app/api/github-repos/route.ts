@@ -16,8 +16,10 @@ export async function POST(request: NextRequest) {
       headers: {
         Accept: "application/vnd.github.v3+json",
         "User-Agent": "Idea-Evaluator-App",
-        Authorization: `token ${process.env.GITHUB_TOKEN}`, // ✅ token added for higher rate limit
+        // Optional: a token raises the search rate limit; without one, search still works
+        ...(process.env.GITHUB_TOKEN ? { Authorization: `Bearer ${process.env.GITHUB_TOKEN}` } : {}),
       },
+      signal: AbortSignal.timeout(8000),
     })
 
     // ✅ Handle GitHub errors gracefully and show the real issue

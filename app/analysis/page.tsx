@@ -104,6 +104,11 @@ interface AnalysisData {
   pros?: string[]
   cons?: string[]
   redditQuery?: string
+  scoreChange?: string
+  riskSeverity?: Partial<Record<"technical" | "usability" | "market", string>>
+  quickWins?: QuickWin[]
+  existingSolutions?: ExistingSolution[]
+  searchQueries?: { github?: string; reddit?: string }
   projectTitle?: string
   projectDescription?: string
   contextAdjustment?: {
@@ -148,7 +153,8 @@ interface ExistingSolution {
   name: string
   url: string
   description: string
-  category: string
+  // How the evaluated idea differs from this one
+  difference?: string
 }
 
 interface QuickWin {
@@ -262,6 +268,10 @@ export default function AnalysisPage() {
   const [analyzing, setAnalyzing] = useState(false)
   // Why the last attempt to mark the idea failed, shown on the page with a retry
   const [analyzeError, setAnalyzeError] = useState<string | null>(null)
+  // Why the next page failed to load, shown under its Continue button
+  const [stageError, setStageError] = useState<string | null>(null)
+  // Saved stage data is only written back once it has been read on load
+  const [hydrated, setHydrated] = useState(false)
   // Follow-up questions, asked when the idea is too vague to mark
   const [clarifyQuestions, setClarifyQuestions] = useState<GuidingQuestion[] | null>(null)
   const [clarifyAnswers, setClarifyAnswers] = useState<string[]>([])
@@ -283,6 +293,11 @@ export default function AnalysisPage() {
         const parsed = JSON.parse(savedAnalysis) as AnalysisData
         setAnalysis(parsed)
       }
+      const savedStages = localStorage.getItem("stageData")
+      if (savedStages) {
+        const stages = JSON.parse(savedStages)
+        if (stages && typeof stages === "object") setStageData(prev => ({ ...prev, ...stages }))
+      }
       const savedInput = localStorage.getItem("evaluationInput")
       if (savedInput) {
         const input = JSON.parse(savedInput)
@@ -303,7 +318,19 @@ export default function AnalysisPage() {
     } catch (e) {
       console.warn("Failed to restore from localStorage:", e)
     }
+    setHydrated(true)
   }, [])
+
+  // Keep the later stages across a refresh (the snapshot is saved separately)
+  useEffect(() => {
+    if (!hydrated) return
+    try {
+      const { stage1: _snapshot, ...laterStages } = stageData
+      localStorage.setItem("stageData", JSON.stringify(laterStages))
+    } catch (e) {
+      console.warn("Failed to save stage data:", e)
+    }
+  }, [stageData, hydrated])
 
   // Navigation helper - go back one stage without clearing the prompt/idea
   const goToPreviousStage = () => {
@@ -476,7 +503,7 @@ export default function AnalysisPage() {
         }
 
         setAnalysis(enhancedAnalysis)
-        setStageData(prev => ({ ...prev, stage1: enhancedAnalysis }))
+        setStageData({ stage1: enhancedAnalysis })
         localStorage.setItem("projectAnalysis", JSON.stringify(enhancedAnalysis))
         // #1: keep what was submitted, so later stages still have the idea after a refresh
         localStorage.setItem("evaluationInput", JSON.stringify({ formData, clarifications: answered ?? null }))
@@ -510,6 +537,7 @@ export default function AnalysisPage() {
     if (!analysis) return
 
     setLoading(true)
+    setStageError(null)
     try {
       switch (targetStage) {
         case AnalysisStage.EXECUTIVE_SUMMARY:
@@ -526,58 +554,60 @@ export default function AnalysisPage() {
       localStorage.setItem("currentStage", targetStage.toString())
     } catch (error) {
       console.error(`Failed to load stage ${targetStage}:`, error)
-      alert("Failed to load next stage. Please try again.")
+      setStageError(error instanceof Error && error.message ? error.message : "Couldn't load the next page. Please try again.")
     } finally {
       setLoading(false)
     }
   }
 
-  // 🔥 STAGE 2: Load Executive Summary Data
+  // 🔥 STAGE 2: Load the Summary. The detailed marking, GitHub and Reddit run in parallel;
+  // GitHub and Reddit use search terms the Snapshot already produced.
   const loadStage2Data = async () => {
-    let stage2Analysis = null
-    const analysisResponse = await fetch("/api/analyze", {
+    const fallbackQuery = analysis?.projectTitle || formData.idea.slice(0, 80)
+
+    const summaryPromise: Promise<AnalysisData | null> = fetch("/api/analyze", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ idea: formData.idea, stage: 'stage2', clarifications: clarifications ?? [] }),
+      signal: AbortSignal.timeout(100_000),
+      body: JSON.stringify({
+        idea: formData.idea,
+        stage: 'stage2',
+        domain: formData.domain,
+        projectType: formData.projectType,
+        experience: formData.experience,
+        timeline: formData.timeline,
+        clarifications: clarifications ?? [],
+        snapshotScore: analysis?.feasibilityScore,
+        snapshotRecommendation: analysis?.recommendation,
+      }),
     })
-    if (analysisResponse.ok) {
-      stage2Analysis = await analysisResponse.json()
-    }
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null)
 
-    // Reddit runs in parallel with the other stage 2 sources
     const redditPromise: Promise<RedditResult> = fetch("/api/reddit", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        query: stage2Analysis?.redditQuery || formData.idea.slice(0, 100),
-        idea: formData.idea,
-      }),
+      body: JSON.stringify({ query: analysis?.searchQueries?.reddit || fallbackQuery, idea: formData.idea }),
     })
       .then((r) => (r.ok ? r.json() : { status: "error", threads: [] }))
       .catch(() => ({ status: "error", threads: [] }))
 
-    const stage2Data = await fetchWithFallback(
-      () => fetch("/api/stage-data", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stage: 2, analysis, idea: formData.idea }),
-      }),
-      async () => {
-        const [quickWins, existingSolutions] = await Promise.all([
-          generateQuickWins(), fetchExistingSolutions()
-        ])
-        return { quickWins, existingSolutions, githubRepos: [] }
-      },
-      "Stage 2 content"
-    )
-    const [repos, reddit] = await Promise.all([
-      fetchGitHubRepos(analysis?.projectTitle || formData.idea),
+    const [summary, reddit, repos] = await Promise.all([
+      summaryPromise,
       redditPromise,
+      fetchGitHubRepos(analysis?.searchQueries?.github || fallbackQuery),
     ])
+    if (!summary) throw new Error("The summary couldn't be written this time. Please try again.")
 
     setStageData(prev => ({
       ...prev,
-      stage2: { ...stage2Data, githubRepos: repos, reddit, analysis: stage2Analysis }
+      stage2: {
+        quickWins: summary.quickWins ?? [],
+        existingSolutions: summary.existingSolutions ?? [],
+        githubRepos: repos,
+        reddit,
+        analysis: summary,
+      },
     }))
   }
 
@@ -729,6 +759,9 @@ export default function AnalysisPage() {
         {loading ? <Loader2 className="animate-spin" /> : <ArrowRight />}
       </Button>
       {hint ? <p className="text-meta text-pencil">{hint}</p> : null}
+      {stageError && !loading ? (
+        <p role="alert" className="text-meta font-medium text-marker">{stageError}</p>
+      ) : null}
     </div>
   )
 
@@ -1186,7 +1219,11 @@ export default function AnalysisPage() {
     const s2Score = typeof s2?.feasibilityScore === "number" ? s2.feasibilityScore : null
     const challenges = s2?.potentialChallenges || analysis.potentialChallenges
     const riskTexts = [challenges?.technicalRisks, challenges?.usabilityIssues, challenges?.marketRisks].filter((t) => !isPlaceholder(t))
-    const seriousCount = riskTexts.filter(isSerious).length
+    // Severity comes from the model; older results fall back to a word check
+    const severity = s2?.riskSeverity
+    const seriousCount = severity && Object.keys(severity).length
+      ? (["technical", "usability", "market"] as const).filter((k) => severity[k] === "high").length
+      : riskTexts.filter(isSerious).length
     // Older results have strengths instead of pros; show those rather than nothing.
     const pros = s2?.pros?.length
       ? s2.pros
@@ -1214,6 +1251,9 @@ export default function AnalysisPage() {
                       <>, this page gives <span className="font-semibold text-marker tabular">{s2Score}/10</span>.</>
                     ) : "; this page agrees."}
                   </p>
+                  {s2Score !== analysis.feasibilityScore && s2?.scoreChange ? (
+                    <p className="text-sm text-ink-soft">{s2.scoreChange}</p>
+                  ) : null}
                 </>
               ) : (
                 <MarginNote mark={scoreMark(analysis.feasibilityScore)} title={`Snapshot mark: ${analysis.feasibilityScore}/10`}>
@@ -1351,10 +1391,11 @@ export default function AnalysisPage() {
           )}
         </SheetRow>
 
+        {stageData.stage2.quickWins.length > 0 ? (
         <SheetRow
           margin={
             <MarginNote mark={<Tick />} title={plural(stageData.stage2.quickWins.length, "quick win")}>
-              Start here this week.
+              Start here in the next week or two.
             </MarginNote>
           }
         >
@@ -1363,32 +1404,46 @@ export default function AnalysisPage() {
             {stageData.stage2.quickWins.map((win, index) => (
               <li key={index} className="text-[0.9375rem] leading-relaxed">
                 <span className="font-semibold text-ink">{win.title}</span>
-                <span className="text-pencil tabular"> · {win.timeEstimate}</span>
+                {win.timeEstimate ? <span className="text-pencil tabular"> · {win.timeEstimate}</span> : null}
                 <p className="text-ink-soft">{win.description}</p>
               </li>
             ))}
           </ul>
         </SheetRow>
+        ) : null}
 
         <SheetRow
           margin={
             stageData.stage2.existingSolutions.length > 0 ? (
-              <MarginNote mark={<Query />} title={`${stageData.stage2.existingSolutions.length} already out there`}>Be ready to say how yours is different.</MarginNote>
+              <MarginNote mark={<Query />} title={`${stageData.stage2.existingSolutions.length} already out there`}>
+                From the AI&apos;s knowledge, not a live search. Check each one before you claim yours is new.
+              </MarginNote>
             ) : (
-              <MarginNote mark={<Query />} title="None found">The search found nothing. Check by hand before you claim it is new.</MarginNote>
+              <MarginNote mark={<Query />} title="None named">Search for alternatives yourself before you claim it is new.</MarginNote>
             )
           }
         >
           <SheetHeading>Existing solutions</SheetHeading>
           {stageData.stage2.existingSolutions.length === 0 ? (
-            <EmptyLine>No existing solutions found.</EmptyLine>
+            <EmptyLine>No existing solutions were named for this idea.</EmptyLine>
           ) : (
-            <ul className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
+            <ul className="grid gap-x-8 gap-y-5 sm:grid-cols-2">
               {stageData.stage2.existingSolutions.map((solution, index) => (
                 <li key={index}>
-                  <LinkTitle href={solution.url}>{solution.name}</LinkTitle>
-                  <p className="mt-0.5 text-meta text-pencil">{solution.category}</p>
-                  <p className="mt-1 text-sm leading-relaxed text-ink-soft">{solution.description}</p>
+                  {solution.url ? (
+                    <LinkTitle href={solution.url}>{solution.name}</LinkTitle>
+                  ) : (
+                    <p className="font-medium text-ink">{solution.name}</p>
+                  )}
+                  {solution.description ? (
+                    <p className="mt-1 text-sm leading-relaxed text-ink-soft">{solution.description}</p>
+                  ) : null}
+                  {solution.difference ? (
+                    <p className="mt-1.5 text-sm leading-relaxed text-ink">
+                      <span className="font-semibold">Yours differs: </span>
+                      {solution.difference}
+                    </p>
+                  ) : null}
                 </li>
               ))}
             </ul>
@@ -1952,72 +2007,6 @@ export default function AnalysisPage() {
   }
 
   // 🔥 STAGE DATA GENERATORS
-  const generateQuickWins = async (): Promise<QuickWin[]> => {
-    if (!analysis) return []
-    return [
-      {
-        title: "Start with MVP",
-        description: "Focus on core features first to validate the concept quickly (1-2 weeks)",
-        timeEstimate: "1-2 weeks"
-      },
-      {
-        title: "User Research",
-        description: "Conduct interviews with 5-10 potential users to validate assumptions (3-5 days)",
-        timeEstimate: "3-5 days"
-      },
-      {
-        title: "💡 Pro Tip: Landing Page",
-        description: "Create a simple landing page to gauge interest and collect early signups before building",
-        timeEstimate: "2-3 days"
-      },
-      {
-        title: "🚀 Quick Win: No-Code Prototype",
-        description: "Use tools like Figma + InVision or Bubble to create an interactive prototype without coding",
-        timeEstimate: "1 week"
-      },
-      {
-        title: "🎯 Bonus Idea: Community Building",
-        description: "Start building a community around your idea on Discord/Slack to get early feedback and beta testers",
-        timeEstimate: "Ongoing"
-      },
-      {
-        title: "📊 Growth Hack: Analytics Setup",
-        description: "Set up Google Analytics and user behavior tracking from day one to understand user patterns",
-        timeEstimate: "1 day"
-      }
-    ]
-  }
-
-  const fetchExistingSolutions = async (): Promise<ExistingSolution[]> => {
-    try {
-      // Simple Google Search - just search the user's idea
-      const response = await fetch('/api/google-search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          idea: formData.idea || analysis?.projectDescription || analysis?.projectTitle
-        })
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        return data.existingSolutions || []
-      }
-    } catch (error) {
-      console.error('[Google Search] Error:', error)
-    }
-
-    // Simple fallback
-    return [
-      {
-        name: "Search Error",
-        url: "#",
-        description: "Unable to fetch search results at this time",
-        category: "Error"
-      }
-    ]
-  }
-
   const generateProjectMilestones = (): ProjectMilestone[] => {
     const ideaText = formData.idea || analysis?.projectDescription || ""
     const isApp = ideaText.toLowerCase().includes('app') || ideaText.toLowerCase().includes('mobile')
@@ -2341,8 +2330,11 @@ export default function AnalysisPage() {
         }
       >
         <SheetHeading>{stageLabels[currentStage] ?? "This page"} isn&apos;t loaded</SheetHeading>
+        {stageError && !loading ? (
+          <p role="alert" className="mb-2 text-sm font-medium text-marker">{stageError}</p>
+        ) : null}
         <p className="max-w-[60ch] text-[0.9375rem] text-ink-soft">
-          Only the snapshot is kept when the page reloads. Load this page again, or go back to the snapshot.
+          This page's data wasn't found. Load it again, or go back to the snapshot.
         </p>
         <Button variant="outline" className="mt-4" onClick={() => selectStage(AnalysisStage.QUICK_SNAPSHOT)} disabled={!analysis}>
           Back to snapshot

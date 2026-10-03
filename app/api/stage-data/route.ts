@@ -7,16 +7,13 @@ const groq = createGroq({
 })
 
 export async function POST(request: NextRequest) {
-  const { stage, analysis, idea } = await request.json()
+  const { stage, analysis } = await request.json()
 
   let responseData = {}
 
   try {
 
     switch (stage) {
-      case 2: // Summary
-        responseData = await generateStage2Data(analysis, idea)
-        break
       case 3: { // Plan: roadmap and tech plan, generated together
         const [roadmap, tech] = await Promise.all([generateStage3Data(analysis), generateStage4Data(analysis)])
         responseData = { ...roadmap, ...tech }
@@ -33,44 +30,6 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error(`Stage ${stage} data generation error:`, error)
     return NextResponse.json({ error: "Failed to generate stage data" }, { status: 500 })
-  }
-}
-
-async function generateStage2Data(analysis: any, idea: string) {
-  // Generate quick wins
-  const quickWins = [
-    {
-      title: "Start with MVP",
-      description: "Focus on core features first to validate the concept quickly",
-      timeEstimate: "1-2 weeks"
-    },
-    {
-      title: "User Research",
-      description: "Conduct interviews with 5-10 potential users to validate assumptions",
-      timeEstimate: "3-5 days"
-    }
-  ]
-
-  // Mock existing solutions
-  const existingSolutions = [
-    {
-      name: "Similar Platform Alpha",
-      url: "https://example.com/platform-alpha",
-      description: "Established solution addressing similar market needs with strong user base",
-      category: "Direct Competitor"
-    },
-    {
-      name: "Complementary Tool Beta",
-      url: "https://example.com/tool-beta",
-      description: "Related service that could be integration partner or competitive threat",
-      category: "Indirect Competitor"
-    }
-  ]
-
-  return {
-    quickWins,
-    existingSolutions,
-    githubRepos: [] // Will be populated by separate GitHub API call
   }
 }
 

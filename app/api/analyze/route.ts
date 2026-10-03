@@ -72,6 +72,10 @@ Otherwise, respond with ONLY valid JSON:
     "userValidation": "Describe how users would validate this idea"
   },
   "aiVerdict": "Overall recommendation with clear next steps",
+  "searchQueries": {
+    "github": "2-4 keywords to find similar open-source projects on GitHub",
+    "reddit": "3-6 words describing the problem this idea solves, to find Reddit discussions (the problem, not a product name)"
+  },
   "selfQuestions": [
     {
       "question": "A question the developer must answer for themselves to make THIS idea clearer (about its users, scope, core feature, data, or constraints). Specific to this idea, never generic.",
@@ -86,7 +90,12 @@ Give 4 to 5 selfQuestions.`,
 
 PROJECT TO ANALYZE: "{idea}"
 {clarifications}
-
+CONTEXT PROVIDED BY DEVELOPER:
+- Domain: {domain}
+- Project Type: {projectType}
+- Experience Level: {experience}
+- Expected Timeline: {timeline}
+{snapshot}
 Give a detailed but scannable assessment. Prefer short, specific points over long paragraphs.
 
 IMPORTANT:
@@ -94,6 +103,9 @@ IMPORTANT:
 - Pros and cons are short points (one sentence each)
 - Cons are downsides of the idea itself (effort, cost, competition, adoption) and must not repeat the risks
 - The executive summary is 3-4 sentences: the overall verdict, the main reason, and the recommended next step
+- Quick wins are 2-3 concrete things this developer can do in the next week or two, specific to this idea
+- Existing solutions must be real products, apps, or open-source projects that already exist. Never invent one. Give the official homepage URL only if you are sure of it, otherwise an empty string
+- Risk severity is "high" only when the risk could stop the project on its own
 - Avoid special characters that could break JSON
 
 Respond with ONLY valid JSON:
@@ -107,12 +119,19 @@ Respond with ONLY valid JSON:
   "executiveSummary": "3-4 sentences: overall verdict, the main reason, and the recommended next step",
   "pros": ["3-4 short points on what is good about this idea"],
   "cons": ["3-4 short points on the downsides of this idea that are not covered by the risks"],
-  "redditQuery": "A 3-6 word search query that would find Reddit discussions about the problem this idea solves (the problem, not the product name)",
+  "scoreChange": "If your feasibilityScore differs from the Snapshot mark, one sentence on why; otherwise an empty string",
   "potentialChallenges": {
     "technicalRisks": "Identify specific technical challenges and development risks",
-    "usabilityIssues": "Analyze security vulnerabilities and privacy considerations",
+    "usabilityIssues": "Analyze usability, security, and privacy problems users would hit",
     "marketRisks": "Assess competition threats and market acquisition challenges"
   },
+  "riskSeverity": { "technical": "low" | "medium" | "high", "usability": "low" | "medium" | "high", "market": "low" | "medium" | "high" },
+  "quickWins": [
+    { "title": "Short action", "description": "One sentence on what to do and why", "timeEstimate": "e.g. 2 days" }
+  ],
+  "existingSolutions": [
+    { "name": "Real product name", "url": "https://official-homepage or empty string", "description": "One sentence on what it does", "difference": "One sentence on how this idea differs from it" }
+  ],
   "techStack": {
     "frontend": ["recommended frontend technologies"],
     "backend": ["scalable backend solutions"],
@@ -124,9 +143,10 @@ Respond with ONLY valid JSON:
     "niceToHaveFeatures": ["List 3-5 valuable but not critical features"],
     "constraints": ["List 3-5 constraints like budget, time, technical limitations"]
   },
-  "recommendations": ["List 3-5 actionable recommendations for next steps"],
-  "similarProjects": ["List 2-3 existing projects or companies with similar ideas"]
-}`
+  "recommendations": ["List 3-5 actionable recommendations for next steps"]
+}
+
+Give 3-4 existingSolutions.`
 }
 
 type Clarification = { question: string; answer: string }
@@ -182,8 +202,17 @@ function cleanPoints(raw: unknown, max = 5): string[] {
 
 export async function POST(request: NextRequest) {
   try {
-    const { idea, stage = 'stage1', domain, projectType, experience, timeline, clarifications: rawClarifications } =
-      await request.json()
+    const {
+      idea,
+      stage = 'stage1',
+      domain,
+      projectType,
+      experience,
+      timeline,
+      clarifications: rawClarifications,
+      snapshotScore,
+      snapshotRecommendation,
+    } = await request.json()
     const clarifications = parseClarifications(rawClarifications)
 
     if (!idea) {
@@ -206,6 +235,7 @@ export async function POST(request: NextRequest) {
       .replace('{timeline}', timeline || 'Not specified')
       .replace('{clarifications}', clarificationBlock(clarifications))
       .replace('{clarityRule}', clarifications ? NO_MORE_QUESTIONS : CLARITY_RULE)
+      .replace('{snapshot}', snapshotBlock(snapshotScore, snapshotRecommendation))
 
     if (stage === 'stage1') return markSnapshot(prompt, clarifications)
     return summarise(prompt)
@@ -213,6 +243,14 @@ export async function POST(request: NextRequest) {
     console.error('[analyze] Unexpected error:', error)
     return NextResponse.json({ error: 'Something went wrong while marking your idea. Please try again.' }, { status: 500 })
   }
+}
+
+// The Snapshot's mark, so the Summary re-marks it rather than scoring from scratch.
+function snapshotBlock(score: unknown, recommendation: unknown): string {
+  const n = Number(score)
+  if (!Number.isFinite(n)) return ''
+  const rec = typeof recommendation === 'string' ? ` (${recommendation.slice(0, 40)})` : ''
+  return `\nTHE SNAPSHOT STAGE MARKED THIS IDEA ${Math.round(n)}/10${rec}. Re-mark it with the extra detail in mind. Keep the same mark unless you have a specific reason to change it.\n`
 }
 
 const AI_FAILED = 'The marking service did not respond properly. Please try again.'
@@ -278,6 +316,58 @@ async function summarise(prompt: string) {
     recommendations: analysis.recommendations || [],
     pros: cleanPoints(analysis.pros),
     cons: cleanPoints(analysis.cons),
-    similarProjects: analysis.similarProjects || [],
+    scoreChange: typeof analysis.scoreChange === 'string' ? analysis.scoreChange.trim() : '',
+    riskSeverity: analysis.riskSeverity || {},
+    quickWins: cleanQuickWins(analysis.quickWins),
+    existingSolutions: await checkSolutionLinks(analysis.existingSolutions),
   })
+}
+
+function cleanQuickWins(raw: unknown) {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .filter((w) => w && typeof w.title === 'string' && w.title.trim())
+    .slice(0, 3)
+    .map((w) => ({
+      title: w.title.trim(),
+      description: typeof w.description === 'string' ? w.description.trim() : '',
+      timeEstimate: typeof w.timeEstimate === 'string' ? w.timeEstimate.trim() : '',
+    }))
+}
+
+/**
+ * Existing solutions come from the model's knowledge, not a live search, so
+ * every link is checked: one that doesn't open is dropped (the name stays).
+ */
+async function checkSolutionLinks(raw: unknown) {
+  if (!Array.isArray(raw)) return []
+  const solutions = raw
+    .filter((s) => s && typeof s.name === 'string' && s.name.trim())
+    .slice(0, 4)
+    .map((s) => ({
+      name: s.name.trim(),
+      url: typeof s.url === 'string' ? s.url.trim() : '',
+      description: typeof s.description === 'string' ? s.description.trim() : '',
+      difference: typeof s.difference === 'string' ? s.difference.trim() : '',
+    }))
+
+  return Promise.all(
+    solutions.map(async (s) => ({ ...s, url: (await linkOpens(s.url)) ? s.url : '' }))
+  )
+}
+
+async function linkOpens(url: string): Promise<boolean> {
+  if (!/^https?:\/\//i.test(url)) return false
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      redirect: 'follow',
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; IdeaEvaluator/0.1)' },
+      signal: AbortSignal.timeout(6000),
+    })
+    // Some sites block bots with 403 but do exist; treat only "not found" style answers as dead.
+    return response.status < 400 || response.status === 403
+  } catch {
+    return false
+  }
 }
