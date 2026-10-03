@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { validateIdea } from "@/lib/validation"
 import { fetchWithFallback } from "@/lib/fetch-with-fallback"
 import { cn } from "@/lib/utils"
+import { CRITERIA } from "@/lib/schemas/snapshot"
 import {
   ArrowRight,
   ArrowUpRight,
@@ -94,6 +95,10 @@ interface AnalysisData {
   aiVerdict?: string
   honestRealityCheck?: string
   selfQuestions?: GuidingQuestion[]
+  // Snapshot marking: six criteria out of 10, averaged into the overall mark
+  rubric?: Partial<Record<string, { score: number; reason: string }>>
+  recommendation?: string
+  shortTitle?: string
   // Summary stage
   executiveSummary?: string
   pros?: string[]
@@ -255,6 +260,8 @@ export default function AnalysisPage() {
     timeline: '',
   })
   const [analyzing, setAnalyzing] = useState(false)
+  // Why the last attempt to mark the idea failed, shown on the page with a retry
+  const [analyzeError, setAnalyzeError] = useState<string | null>(null)
   // Follow-up questions, asked when the idea is too vague to mark
   const [clarifyQuestions, setClarifyQuestions] = useState<GuidingQuestion[] | null>(null)
   const [clarifyAnswers, setClarifyAnswers] = useState<string[]>([])
@@ -275,6 +282,12 @@ export default function AnalysisPage() {
       if (savedAnalysis) {
         const parsed = JSON.parse(savedAnalysis) as AnalysisData
         setAnalysis(parsed)
+      }
+      const savedInput = localStorage.getItem("evaluationInput")
+      if (savedInput) {
+        const input = JSON.parse(savedInput)
+        if (input?.formData?.idea) setFormData(prev => ({ ...prev, ...input.formData }))
+        if (Array.isArray(input?.clarifications)) setClarifications(input.clarifications)
       }
       const savedProgress = localStorage.getItem("taskProgress")
       if (savedProgress) {
@@ -417,13 +430,16 @@ export default function AnalysisPage() {
     // 🛡️ Client-side guardrail check (validateIdea is shared with the server)
     const clientError = validateIdea(formData.idea)
     if (clientError) {
-      alert(clientError)
+      setAnalyzeError(clientError)
       return
     }
 
+    setAnalyzeError(null)
     setAnalyzing(true)
     try {
       const response = await fetch("/api/analyze", {
+        // The server may retry once, so allow a little over two Gemini timeouts
+        signal: AbortSignal.timeout(100_000),
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -455,27 +471,35 @@ export default function AnalysisPage() {
         
         const enhancedAnalysis = {
           ...validatedAnalysisData,
-          projectTitle: `Project: ${formData.idea.substring(0, 50)}${formData.idea.length > 50 ? "..." : ""}`,
+          projectTitle: rawAnalysisData.shortTitle || formData.idea.slice(0, 60),
           projectDescription: formData.idea,
         }
 
         setAnalysis(enhancedAnalysis)
         setStageData(prev => ({ ...prev, stage1: enhancedAnalysis }))
         localStorage.setItem("projectAnalysis", JSON.stringify(enhancedAnalysis))
+        // #1: keep what was submitted, so later stages still have the idea after a refresh
+        localStorage.setItem("evaluationInput", JSON.stringify({ formData, clarifications: answered ?? null }))
         localStorage.setItem("currentStage", AnalysisStage.QUICK_SNAPSHOT.toString())
         
         // Move to Stage 1
         setCurrentStage(AnalysisStage.QUICK_SNAPSHOT)
-      } else if (response.status === 422) {
-        const errorData = await response.json().catch(() => null)
-        alert(errorData?.error || 'Your input did not pass validation. Please check your idea description.')
       } else {
-        const errorText = await response.text()
-        alert(`Failed to generate analysis. Status: ${response.status}`)
+        const errorData = await response.json().catch(() => null)
+        setAnalyzeError(
+          errorData?.error ||
+            (response.status === 422
+              ? "That doesn't look like a project idea yet. Describe what it does and who it is for."
+              : "The idea couldn't be marked this time. Please try again.")
+        )
       }
     } catch (error) {
       console.error("[Analysis] Error:", error)
-      alert(`Network error occurred: ${error instanceof Error ? error.message : "Unknown error"}`)
+      setAnalyzeError(
+        error instanceof DOMException && error.name === "TimeoutError"
+          ? "Marking took too long. Please try again."
+          : "Couldn't reach the server. Check your connection and try again."
+      )
     } finally {
       setAnalyzing(false)
     }
@@ -649,7 +673,7 @@ export default function AnalysisPage() {
     score >= 8 ? <Tick title="Strong" /> : score >= 6 ? <Query title="Workable, with conditions" /> : <Cross title="Weak" />
 
   // Placeholder copy the API fills in when a field is missing: never counted as a judgment.
-  const isPlaceholder = (t?: string) => !t || /assessment needed|review needed|analysis needed|not available/i.test(t)
+  const isPlaceholder = (t?: string) => !t || /assessment needed|review needed|analysis needed|strategy needed|not available/i.test(t)
   const isSerious = (t?: string) =>
     /critical|severe|serious|major|significant|fatal|legal|regulat|privacy|compliance|high risk|biggest/i.test(t || "")
   const isWeakDemand = (t?: string) =>
@@ -724,6 +748,16 @@ export default function AnalysisPage() {
     </a>
   )
 
+  // A failed attempt to mark the idea: what went wrong and a way to retry
+  const AnalyzeErrorNote = () =>
+    analyzeError ? (
+      <div role="alert" className="mb-5 border-b border-rule pb-5">
+        <MarginNote mark={<Cross />} title="Couldn't mark it">
+          {analyzeError}
+        </MarginNote>
+      </div>
+    ) : null
+
   // 🎨 STAGE 0: THE BLANK SCRIPT
   const renderInputStage = () => (
     <form onSubmit={handleAnalyzeIdea}>
@@ -734,6 +768,7 @@ export default function AnalysisPage() {
           bodyClassName="sm:py-9"
           margin={
             <div className="space-y-5">
+              <AnalyzeErrorNote />
               <div>
                 <p className="text-sm font-semibold text-marker">Context for the examiner</p>
                 <p className="mt-1 text-meta text-pencil">Optional. It changes how strictly the idea is marked.</p>
@@ -876,9 +911,12 @@ export default function AnalysisPage() {
             marginFirstOnMobile
             marginLabel="Examiner's note"
             margin={
-              <MarginNote mark={<Query />} title="Not enough to mark yet">
-                Answer what you can. Anything you leave blank is marked as unknown.
-              </MarginNote>
+              <div>
+                <AnalyzeErrorNote />
+                <MarginNote mark={<Query />} title="Not enough to mark yet">
+                  Answer what you can. Anything you leave blank is marked as unknown.
+                </MarginNote>
+              </div>
             }
           >
             <h1 className="text-[1.5rem] font-semibold tracking-[-0.02em] text-ink sm:text-[1.75rem]">
@@ -972,9 +1010,14 @@ export default function AnalysisPage() {
   // 🎨 STAGE 1: QUICK SNAPSHOT
   const renderQuickSnapshot = () => {
     if (!analysis) return null
-    const { category } = generateCategoryAndTags(analysis.projectDescription || "", analysis.projectTitle || "")
-    const badge = getFeasibilityBadge(analysis.feasibilityScore)
-    const multiplier = parseFloat(analysis.contextAdjustment?.multiplier || "1")
+    // Older saved results have no recommendation; fall back to a label from the score.
+    const verdictLabel = analysis.recommendation || getFeasibilityBadge(analysis.feasibilityScore).text
+    const users = analysis.targetUsersMarketFit
+    const audience = [
+      ["Primary users", users?.primaryUsers],
+      ["Demand", users?.marketDemand],
+      ["How to validate", users?.userValidation],
+    ].filter((pair): pair is [string, string] => Boolean(pair[1]) && !isPlaceholder(pair[1]))
     const verdict = analysis.aiVerdict || generateAIVerdict(analysis.feasibilityScore, analysis.successProbability, analysis.difficultyLevel)
 
     return (
@@ -987,12 +1030,12 @@ export default function AnalysisPage() {
               <div className="flex items-center gap-3 lg:flex-col lg:items-start">
                 <CircledScore score={analysis.feasibilityScore} />
                 <div>
-                  <p className="text-[1.0625rem] font-semibold text-marker">{badge.text}</p>
-                  <p className="text-meta text-pencil">Feasibility, out of 10</p>
+                  <p className="text-[1.0625rem] font-semibold text-marker">{verdictLabel}</p>
+                  <p className="text-meta text-pencil">Mark out of 10</p>
                 </div>
               </div>
               <dl className="grid grid-cols-2 gap-4 border-t border-rule pt-4">
-                <Fact label="Success odds"><span className="tabular">{analysis.successProbability}%</span></Fact>
+                <Fact label="Odds of success"><span className="tabular">{analysis.successProbability}%</span></Fact>
                 <Fact label="Difficulty">{analysis.difficultyLevel}</Fact>
               </dl>
             </div>
@@ -1002,7 +1045,6 @@ export default function AnalysisPage() {
             {analysis.projectDescription}
           </h1>
           <dl className="mt-6 flex flex-wrap gap-x-8 gap-y-4">
-            <Fact label="Category">{category}</Fact>
             {analysis.detectedDomain ? <Fact label="Domain">{analysis.detectedDomain}</Fact> : null}
             {analysis.requiredExperience ? <Fact label="Experience needed">{analysis.requiredExperience}</Fact> : null}
           </dl>
@@ -1020,16 +1062,49 @@ export default function AnalysisPage() {
           ) : null}
         </SheetRow>
 
+        {analysis.rubric ? (
+          <SheetRow
+            marginLabel="Examiner's note"
+            margin={
+              <MarginNote mark={scoreMark(analysis.feasibilityScore)} title={`How the ${analysis.feasibilityScore} is worked out`}>
+                Each criterion is marked out of 10. The mark is their average.
+              </MarginNote>
+            }
+          >
+            <SheetHeading>How it was marked</SheetHeading>
+            <ul className="divide-y divide-rule">
+              {CRITERIA.map((criterion) => {
+                const m = analysis.rubric?.[criterion.id]
+                if (!m) return null
+                return (
+                  <li
+                    key={criterion.id}
+                    className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-6 gap-y-1 py-3 first:pt-0 last:pb-0 sm:grid-cols-[13rem_minmax(0,1fr)_auto] sm:items-baseline"
+                  >
+                    <p className="flex items-center gap-2 font-semibold text-ink">
+                      <span className="text-marker">
+                        {m.score >= 7 ? <Tick className="size-4" /> : m.score >= 4 ? <Query className="size-4" /> : <Cross className="size-4" />}
+                      </span>
+                      {criterion.name}
+                    </p>
+                    <p className="col-span-2 row-start-2 text-[0.9375rem] leading-relaxed text-ink-soft sm:col-span-1 sm:col-start-2 sm:row-start-1">
+                      {m.reason}
+                    </p>
+                    <p className="col-start-2 row-start-1 font-hand text-xl font-bold leading-none text-marker tabular sm:col-start-3">
+                      {m.score}/10
+                    </p>
+                  </li>
+                )
+              })}
+            </ul>
+          </SheetRow>
+        ) : null}
+
         <SheetRow
           marginLabel="Examiner's note"
           margin={
             <MarginNote mark={scoreMark(analysis.feasibilityScore)} title="The honest read">
-              The highlighted line is what decides the mark.{" "}
-              {multiplier < 1
-                ? `Score lowered (×${analysis.contextAdjustment?.multiplier}) because the idea involves complex technology.`
-                : multiplier > 1
-                  ? `Score raised (×${analysis.contextAdjustment?.multiplier}) because the scope is simple.`
-                  : ""}
+              The highlighted line is what decides the mark.
             </MarginNote>
           }
         >
@@ -1037,6 +1112,7 @@ export default function AnalysisPage() {
           <HighlightLead className="max-w-[68ch]" text={analysis.honestRealityCheck || analysis.honestAiFeedback} />
         </SheetRow>
 
+        {audience.length > 0 ? (
         <SheetRow
           margin={
             isWeakDemand(analysis.targetUsersMarketFit?.marketDemand) ? (
@@ -1052,20 +1128,15 @@ export default function AnalysisPage() {
         >
           <SheetHeading>Who it is for</SheetHeading>
           <dl className="grid gap-5 sm:grid-cols-3">
-            <div>
-              <dt className="label-caps">Primary users</dt>
-              <dd className="mt-1.5 text-[0.9375rem] leading-relaxed text-ink">{analysis.targetUsersMarketFit?.primaryUsers}</dd>
-            </div>
-            <div>
-              <dt className="label-caps">Demand</dt>
-              <dd className="mt-1.5 text-[0.9375rem] leading-relaxed text-ink">{analysis.targetUsersMarketFit?.marketDemand}</dd>
-            </div>
-            <div>
-              <dt className="label-caps">How to validate</dt>
-              <dd className="mt-1.5 text-[0.9375rem] leading-relaxed text-ink">{analysis.targetUsersMarketFit?.userValidation}</dd>
-            </div>
+            {audience.map(([label, value]) => (
+              <div key={label}>
+                <dt className="label-caps">{label}</dt>
+                <dd className="mt-1.5 text-[0.9375rem] leading-relaxed text-ink">{value}</dd>
+              </div>
+            ))}
           </dl>
         </SheetRow>
+        ) : null}
 
         {analysis.selfQuestions && analysis.selfQuestions.length > 0 ? (
           <SheetRow
@@ -1097,7 +1168,7 @@ export default function AnalysisPage() {
             <ContinueButton
               to={AnalysisStage.EXECUTIVE_SUMMARY}
               label="Continue to summary"
-              hint="Next: strengths, risks, scope, and existing projects like yours."
+              hint="Next: pros and cons, risks, what people say, and existing projects like yours."
             />
           }
         >
@@ -1853,55 +1924,6 @@ export default function AnalysisPage() {
     return "border-red-500 bg-red-500/10"
   }
 
-  // Generate category and tags based on project description
-  const generateCategoryAndTags = (description: string, title: string) => {
-    const text = `${title} ${description}`.toLowerCase()
-    
-    // Define categories with keywords
-    const categoryMap = {
-      "EdTech": ["education", "learning", "student", "teacher", "course", "school", "university", "training"],
-      "FinTech": ["finance", "banking", "payment", "money", "investment", "trading", "wallet", "cryptocurrency"],
-      "HealthTech": ["health", "medical", "healthcare", "doctor", "patient", "hospital", "wellness", "fitness"],
-      "E-commerce": ["shop", "store", "marketplace", "buy", "sell", "retail", "product", "order"],
-      "SaaS": ["software", "service", "platform", "tool", "dashboard", "api", "cloud", "subscription"],
-      "Social": ["social", "community", "network", "chat", "messaging", "forum", "connect"],
-      "Gaming": ["game", "gaming", "player", "entertainment", "virtual", "interactive"],
-      "Productivity": ["productivity", "management", "organize", "task", "workflow", "efficiency"],
-      "IoT": ["iot", "device", "sensor", "smart", "connected", "automation", "hardware"],
-      "AI/ML": ["ai", "artificial intelligence", "machine learning", "ml", "neural", "algorithm"]
-    }
-
-    // Find matching category
-    let category = "Tech"
-    for (const [cat, keywords] of Object.entries(categoryMap)) {
-      if (keywords.some(keyword => text.includes(keyword))) {
-        category = cat
-        break
-      }
-    }
-
-    // Generate tags based on common tech keywords
-    const possibleTags = [
-      { keyword: ["dashboard", "admin", "panel"], tag: "Dashboard" },
-      { keyword: ["api", "backend", "server"], tag: "API" },
-      { keyword: ["mobile", "app", "ios", "android"], tag: "Mobile App" },
-      { keyword: ["web", "website", "frontend"], tag: "Web App" },
-      { keyword: ["database", "data", "storage"], tag: "Database" },
-      { keyword: ["automation", "automatic", "auto"], tag: "Automation" },
-      { keyword: ["portal", "platform", "system"], tag: "Portal" },
-      { keyword: ["analytics", "analysis", "reporting"], tag: "Analytics" },
-      { keyword: ["user", "customer", "client"], tag: "User Management" },
-      { keyword: ["integration", "connect", "sync"], tag: "Integration" }
-    ]
-
-    const tags = possibleTags
-      .filter(({ keyword }) => keyword.some(k => text.includes(k)))
-      .map(({ tag }) => tag)
-      .slice(0, 3) // Limit to 3 tags
-
-    return { category, tags }
-  }
-
   // Generate AI verdict based on scores
   const generateAIVerdict = (feasibility: number, successProbability: number, difficulty: string) => {
     const feasibilityLevel = feasibility >= 8 ? "strong" : feasibility >= 6 ? "moderate" : "limited"
@@ -1922,6 +1944,7 @@ export default function AnalysisPage() {
 
   // Function to go back to input stage
   const goBackToInput = () => {
+    setAnalyzeError(null)
     setClarifyQuestions(null)
     setClarifications(null)
     setCurrentStage(AnalysisStage.INPUT)

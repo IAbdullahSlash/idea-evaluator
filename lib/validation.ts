@@ -24,17 +24,17 @@ export function validateIdea(idea: string): string | null {
     return 'Your input looks like gibberish or random text — please describe a real project idea.'
   }
 
+  // Only reject input that is clearly not an idea. Topics (crypto, finance) and links are fine.
   const spamPatterns = [
-    /https?:\/\/\S+/i,
-    /bitcoin|crypto|invest now|get rich|earn money/i,
+    // One long unbroken token with no spaces, like "asdkjhqwe123"
     /^[a-z0-9]{10,}$/i,
-    // Repeated character spam: "aaaaa", "bbbbbb", etc.
-    /(.)\1{4,}/i,
+    // The same letter five or more times: "aaaaa" (punctuation like "....." is fine)
+    /([a-z])\1{4,}/i,
   ]
 
   for (const pattern of spamPatterns) {
     if (pattern.test(trimmed)) {
-      return 'Please describe a real project idea — spam or unrelated content detected.'
+      return "That doesn't look like a project idea yet. Describe what it does and who it is for."
     }
   }
 

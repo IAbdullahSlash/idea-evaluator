@@ -1,20 +1,7 @@
-import { GoogleGenerativeAI } from '@google/generative-ai'
 import { type NextRequest, NextResponse } from 'next/server'
 import { validateIdea } from '@/lib/validation'
-
-function getGeminiKeys(): string[] {
-  const key1 = process.env.GEMINI_API_KEY
-  const key2 = process.env.GEMINI_API_KEY_2
-  return [key1, key2].filter((k): k is string => Boolean(k))
-}
-
-function getGenerativeModel(apiKey: string) {
-  const genAI = new GoogleGenerativeAI(apiKey)
-  return genAI.getGenerativeModel({
-    model: 'gemini-3.5-flash',
-    generationConfig: { responseMimeType: 'application/json' },
-  })
-}
+import { generateJson } from '@/lib/gemini'
+import { overallScore, snapshotSchema } from '@/lib/schemas/snapshot'
 
 // Intent validation is shared via lib/validation.ts (see validateIdea).
 
@@ -39,11 +26,19 @@ You must provide a concise but comprehensive assessment focusing on three key ar
 - What are the real-world challenges and obstacles?
 - How complex is this really to build and maintain?
 
-2. AI VERDICT:
-- Overall feasibility score (1-10) with clear reasoning
-- Success probability percentage with justification
-- Recommended approach (build, modify, or abandon)
-- Key next steps if proceeding
+2. MARKING SCHEME (mark each criterion 1-10, where 10 is best):
+- realProblem: Does it solve a clear problem that someone actually has?
+- worthSolving: Is the pain big enough that people would change what they do today?
+- alreadyDone: Is there room? 10 means nothing does this well yet; 1 means a free tool already does it well
+- somethingNew: What does it do that the alternatives don't?
+- withinReach: Can THIS developer build it with their stated experience and time?
+- someoneWantsIt: Are there users, and is there demand for it?
+
+3. VERDICT:
+- A recommendation: "Build", "Narrow it down", "Rethink", or "Drop"
+- The chance of success as a percentage
+- Key next steps
+The recommendation and success chance must agree with the marks above.
 
 IMPORTANT:
 - Be brutally honest and realistic
@@ -56,9 +51,18 @@ IMPORTANT:
 
 Otherwise, respond with ONLY valid JSON:
 {
-  "feasibilityScore": number (1-10),
+  "shortTitle": "A 2-6 word name for the idea",
+  "rubric": {
+    "realProblem": { "score": number (1-10), "reason": "One short sentence" },
+    "worthSolving": { "score": number (1-10), "reason": "One short sentence" },
+    "alreadyDone": { "score": number (1-10), "reason": "One short sentence" },
+    "somethingNew": { "score": number (1-10), "reason": "One short sentence" },
+    "withinReach": { "score": number (1-10), "reason": "One short sentence" },
+    "someoneWantsIt": { "score": number (1-10), "reason": "One short sentence" }
+  },
+  "recommendation": "Build" | "Narrow it down" | "Rethink" | "Drop",
   "difficultyLevel": "Beginner" | "Intermediate" | "Advanced",
-  "successProbability": number (10-95),
+  "successProbability": number (5-95),
   "detectedDomain": "domain category",
   "requiredExperience": "Beginner" | "Intermediate" | "Advanced",
   "honestAiFeedback": "Direct assessment of feasibility and real challenges",
@@ -176,63 +180,6 @@ function cleanPoints(raw: unknown, max = 5): string[] {
   return raw.filter((p): p is string => typeof p === 'string' && p.trim().length > 0).slice(0, max).map((p) => p.trim())
 }
 
-function applyContextAwareScoring(analysis: any, originalIdea: string) {
-  const ideaLower = originalIdea.toLowerCase()
-
-  const complexityFactors: Record<string, number> = {
-    'artificial intelligence': 0.6,
-    'machine learning': 0.7,
-    'blockchain': 0.6,
-    'cryptocurrency': 0.5,
-    'real-time': 0.8,
-    'distributed': 0.7,
-    'microservices': 0.8,
-    'scalable': 0.9,
-    'enterprise': 0.7,
-    'database': 0.9,
-    'api integration': 0.9,
-    'user authentication': 0.95,
-    'crud': 1.2,
-    'simple': 1.3,
-    'basic': 1.2,
-    'static website': 1.4,
-    'portfolio': 1.3
-  }
-
-  let complexityMultiplier = 1.0
-
-  Object.entries(complexityFactors).forEach(([keyword, factor]) => {
-    if (ideaLower.includes(keyword)) {
-      complexityMultiplier *= factor
-    }
-  })
-
-  const adjustedFeasibility = Math.max(1, Math.min(10,
-    Math.round(analysis.feasibilityScore * complexityMultiplier)
-  ))
-
-  const adjustedSuccess = Math.max(15, Math.min(90,
-    Math.round(analysis.successProbability * complexityMultiplier)
-  ))
-
-  return {
-    ...analysis,
-    feasibilityScore: adjustedFeasibility,
-    successProbability: adjustedSuccess,
-    contextAdjustment: {
-      multiplier: complexityMultiplier.toFixed(2),
-      reason: complexityMultiplier < 1 ? 'Reduced for complexity' : 'Standard assessment'
-    }
-  }
-}
-
-async function callGemini(apiKey: string, prompt: string): Promise<string> {
-  const model = getGenerativeModel(apiKey)
-  const result = await model.generateContent(prompt)
-  const response = await result.response
-  return response.text()
-}
-
 export async function POST(request: NextRequest) {
   try {
     const { idea, stage = 'stage1', domain, projectType, experience, timeline, clarifications: rawClarifications } =
@@ -249,14 +196,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: guardrailError }, { status: 422 })
     }
 
-    // 🚀 EXTRA CONTEXT FROM FRONTEND
-    const extraContext = [domain, projectType, experience, timeline].filter(Boolean).join(', ')
-    const contextPrefix = extraContext ? `${idea} (Domain: ${extraContext})` : idea
-
-    // 🚀 Select prompt and inject idea + context placeholders
+    // 🚀 Select the prompt and fill in the idea, its context, and any clarifications
     const selectedPrompt = stagePrompts[stage] || stagePrompts.stage1
-    const promptWithContext = selectedPrompt
-      .replace('{idea}', contextPrefix)
+    const prompt = selectedPrompt
+      .replace('{idea}', idea)
       .replace('{domain}', domain || 'Not specified')
       .replace('{projectType}', projectType || 'Not specified')
       .replace('{experience}', experience || 'Not specified')
@@ -264,120 +207,77 @@ export async function POST(request: NextRequest) {
       .replace('{clarifications}', clarificationBlock(clarifications))
       .replace('{clarityRule}', clarifications ? NO_MORE_QUESTIONS : CLARITY_RULE)
 
-    // 🚀 Try each Gemini API key until one works
-    const apiKeys = getGeminiKeys()
-    if (apiKeys.length === 0) {
-      return NextResponse.json({ error: 'No Gemini API key configured' }, { status: 500 })
-    }
-
-    let text: string | null = null
-    let lastError: Error | null = null
-
-    for (const apiKey of apiKeys) {
-      try {
-        text = await callGemini(apiKey, promptWithContext)
-        break
-      } catch (err) {
-        lastError = err instanceof Error ? err : new Error(String(err))
-        console.warn(`[analyze] Gemini key failed, trying next: ${lastError.message}`)
-        continue
-      }
-    }
-
-    if (!text) {
-      console.error('[analyze] All Gemini keys failed:', lastError?.message)
-      return NextResponse.json({ error: 'AI analysis failed. Please try again.' }, { status: 500 })
-    }
-
-    // 🚀 JSON EXTRACTION WITH CLEANING
-    let analysis: any
-    try {
-      let cleanedText = text.trim()
-      cleanedText = cleanedText.replace(/```json\s*/g, '').replace(/```\s*/g, '')
-      analysis = JSON.parse(cleanedText)
-    } catch (parseError) {
-      const jsonStart = text.indexOf('{')
-      const jsonEnd = text.lastIndexOf('}')
-
-      if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
-        let jsonString = text.substring(jsonStart, jsonEnd + 1)
-        jsonString = jsonString.replace(/\n\s*\n/g, '\n')
-        jsonString = jsonString.replace(/,(\s*[}\]])/g, '$1')
-
-        try {
-          analysis = JSON.parse(jsonString)
-        } catch (extractError) {
-          console.error('[analyze] JSON extraction failed:', extractError)
-          return NextResponse.json({ error: 'AI analysis failed to generate valid response.' }, { status: 500 })
-        }
-      } else {
-        return NextResponse.json({ error: 'AI analysis failed to generate valid response.' }, { status: 500 })
-      }
-    }
-
-    // 🚀 CLARIFICATION GATE: stage 1 only, and only before the developer has answered
-    if (analysis?.needsClarification) {
-      const questions = cleanQuestions(analysis.questions, MAX_QUESTIONS)
-      if (stage === 'stage1' && !clarifications && questions.length > 0) {
-        return NextResponse.json({ needsClarification: true, questions })
-      }
-      console.error('[analyze] Model asked for clarification after the idea was clarified')
-      return NextResponse.json({ error: 'AI analysis failed. Please try again.' }, { status: 502 })
-    }
-
-    // 🚀 APPLY CONTEXT-AWARE SCORING
-    const finalAnalysis = applyContextAwareScoring(analysis, idea)
-
-    // 🚀 ENSURE ALL EXPECTED FIELDS ARE PRESENT
-    const enrichedAnalysis = {
-      ...finalAnalysis,
-      estimatedTimeframe: finalAnalysis.estimatedTimeframe || 'TBD',
-      honestRealityCheck: finalAnalysis.honestRealityCheck || finalAnalysis.honestAiFeedback || 'Analysis unavailable',
-      projectTitle: '',
-      projectDescription: '',
-      contextAdjustment: finalAnalysis.contextAdjustment || { multiplier: '1.00', reason: 'Standard assessment' },
-      validationApplied: finalAnalysis.validationApplied || { adjustments: 'None', confidence: 'Medium' },
-      keyStrengths: finalAnalysis.keyStrengths || {
-        valueProposition: 'Value proposition assessment needed',
-        marketFit: 'Market fit analysis needed'
-      },
-      potentialChallenges: finalAnalysis.potentialChallenges || {
-        technicalRisks: 'Technical risk assessment needed',
-        usabilityIssues: 'Usability review needed',
-        marketRisks: 'Market risk analysis needed'
-      },
-      requirementsScope: finalAnalysis.requirementsScope || {
-        mustHaveFeatures: [],
-        niceToHaveFeatures: [],
-        constraints: []
-      },
-      targetUsersMarketFit: finalAnalysis.targetUsersMarketFit || {
-        primaryUsers: 'User analysis needed',
-        marketDemand: 'Market demand assessment needed',
-        userValidation: 'User validation strategy needed'
-      },
-      techStack: finalAnalysis.techStack || {
-        frontend: [],
-        backend: [],
-        database: [],
-        tools: []
-      },
-      roadmap: finalAnalysis.roadmap || {
-        phase1: { title: 'Phase 1', duration: 'TBD', tasks: [] },
-        phase2: { title: 'Phase 2', duration: 'TBD', tasks: [] },
-        phase3: { title: 'Phase 3', duration: 'TBD', tasks: [] }
-      },
-      recommendations: finalAnalysis.recommendations || [],
-      selfQuestions: cleanQuestions(finalAnalysis.selfQuestions, 5),
-      pros: cleanPoints(finalAnalysis.pros),
-      cons: cleanPoints(finalAnalysis.cons),
-      similarProjects: finalAnalysis.similarProjects || [],
-    }
-
-    return NextResponse.json(enrichedAnalysis)
+    if (stage === 'stage1') return markSnapshot(prompt, clarifications)
+    return summarise(prompt)
   } catch (error) {
     console.error('[analyze] Unexpected error:', error)
-    return NextResponse.json({ error: 'Failed to analyze project idea' }, { status: 500 })
+    return NextResponse.json({ error: 'Something went wrong while marking your idea. Please try again.' }, { status: 500 })
   }
 }
 
+const AI_FAILED = 'The marking service did not respond properly. Please try again.'
+
+/**
+ * Stage 1: ask, validate against the schema, and retry once if the reply is
+ * incomplete. A vague idea may come back with follow-up questions instead.
+ */
+async function markSnapshot(prompt: string, clarifications: Clarification[] | null) {
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    let raw: any
+    try {
+      raw = await generateJson(prompt)
+    } catch (error) {
+      console.error('[analyze] Gemini failed:', error instanceof Error ? error.message : error)
+      return NextResponse.json({ error: AI_FAILED }, { status: 502 })
+    }
+
+    if (raw?.needsClarification) {
+      const questions = cleanQuestions(raw.questions, MAX_QUESTIONS)
+      if (!clarifications && questions.length > 0) {
+        return NextResponse.json({ needsClarification: true, questions })
+      }
+      console.warn('[analyze] Asked for clarification after the idea was clarified; retrying')
+      continue
+    }
+
+    const parsed = snapshotSchema.safeParse(raw)
+    if (!parsed.success) {
+      console.warn(`[analyze] Incomplete snapshot (attempt ${attempt}):`, parsed.error.issues.map((i) => i.path.join('.')).join(', '))
+      continue
+    }
+
+    const snapshot = parsed.data
+    return NextResponse.json({
+      ...snapshot,
+      feasibilityScore: overallScore(snapshot.rubric),
+      successProbability: Math.round(Math.min(95, Math.max(5, snapshot.successProbability))),
+      honestRealityCheck: snapshot.honestAiFeedback,
+      selfQuestions: cleanQuestions(snapshot.selfQuestions, 5),
+    })
+  }
+  return NextResponse.json({ error: AI_FAILED }, { status: 502 })
+}
+
+/** Stage 2: the detailed summary. Missing fields fall back to empty values the page hides. */
+async function summarise(prompt: string) {
+  let analysis: any
+  try {
+    analysis = await generateJson(prompt)
+  } catch (error) {
+    console.error('[analyze] Gemini failed:', error instanceof Error ? error.message : error)
+    return NextResponse.json({ error: AI_FAILED }, { status: 502 })
+  }
+
+  const score = Number(analysis?.feasibilityScore)
+  return NextResponse.json({
+    ...analysis,
+    feasibilityScore: Number.isFinite(score) ? Math.round(Math.min(10, Math.max(1, score))) : undefined,
+    potentialChallenges: analysis.potentialChallenges || {},
+    requirementsScope: analysis.requirementsScope || { mustHaveFeatures: [], niceToHaveFeatures: [], constraints: [] },
+    techStack: analysis.techStack || { frontend: [], backend: [], database: [], tools: [] },
+    recommendations: analysis.recommendations || [],
+    pros: cleanPoints(analysis.pros),
+    cons: cleanPoints(analysis.cons),
+    similarProjects: analysis.similarProjects || [],
+  })
+}
