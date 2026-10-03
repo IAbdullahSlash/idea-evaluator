@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { validateIdea } from '@/lib/validation'
-import { generateJson } from '@/lib/gemini'
+import { NoModelAvailableError, forget, generateJsonWithMeta } from '@/lib/llm'
 import { overallScore, snapshotSchema } from '@/lib/schemas/snapshot'
 
 // Intent validation is shared via lib/validation.ts (see validateIdea).
@@ -254,19 +254,29 @@ function snapshotBlock(score: unknown, recommendation: unknown): string {
 }
 
 const AI_FAILED = 'The marking service did not respond properly. Please try again.'
+const AI_BUSY = 'The AI models have reached their limits for now. Please try again in a little while.'
+
+function aiError(error: unknown) {
+  console.error('[analyze] Model call failed:', error instanceof Error ? error.message : error)
+  const busy = error instanceof NoModelAvailableError
+  return NextResponse.json({ error: busy ? AI_BUSY : AI_FAILED }, { status: busy ? 503 : 502 })
+}
 
 /**
  * Stage 1: ask, validate against the schema, and retry once if the reply is
- * incomplete. A vague idea may come back with follow-up questions instead.
+ * incomplete. The retry goes to a different model, since the same one tends to
+ * repeat itself. A vague idea may come back with follow-up questions instead.
  */
 async function markSnapshot(prompt: string, clarifications: Clarification[] | null) {
+  const tried: string[] = []
   for (let attempt = 1; attempt <= 2; attempt++) {
     let raw: any
     try {
-      raw = await generateJson(prompt)
+      const reply = await generateJsonWithMeta<any>(prompt, { tier: 'quality', exclude: tried, cache: attempt === 1 })
+      raw = reply.data
+      tried.push(reply.model.replace(' (cached)', ''))
     } catch (error) {
-      console.error('[analyze] Gemini failed:', error instanceof Error ? error.message : error)
-      return NextResponse.json({ error: AI_FAILED }, { status: 502 })
+      return aiError(error)
     }
 
     if (raw?.needsClarification) {
@@ -275,12 +285,14 @@ async function markSnapshot(prompt: string, clarifications: Clarification[] | nu
         return NextResponse.json({ needsClarification: true, questions })
       }
       console.warn('[analyze] Asked for clarification after the idea was clarified; retrying')
+      forget(prompt, 'quality')
       continue
     }
 
     const parsed = snapshotSchema.safeParse(raw)
     if (!parsed.success) {
       console.warn(`[analyze] Incomplete snapshot (attempt ${attempt}):`, parsed.error.issues.map((i) => i.path.join('.')).join(', '))
+      forget(prompt, 'quality')
       continue
     }
 
@@ -300,10 +312,9 @@ async function markSnapshot(prompt: string, clarifications: Clarification[] | nu
 async function summarise(prompt: string) {
   let analysis: any
   try {
-    analysis = await generateJson(prompt)
+    analysis = (await generateJsonWithMeta<any>(prompt, { tier: 'quality' })).data
   } catch (error) {
-    console.error('[analyze] Gemini failed:', error instanceof Error ? error.message : error)
-    return NextResponse.json({ error: AI_FAILED }, { status: 502 })
+    return aiError(error)
   }
 
   const score = Number(analysis?.feasibilityScore)

@@ -1,10 +1,5 @@
-import { generateText } from "ai"
-import { createGroq } from "@ai-sdk/groq"
+import { generateJson } from "@/lib/llm"
 import { type NextRequest, NextResponse } from "next/server"
-
-const groq = createGroq({
-  apiKey: process.env.GROQ_API_KEY,
-})
 
 export async function POST(request: NextRequest) {
   const { stage, analysis } = await request.json()
@@ -71,17 +66,7 @@ Guidelines:
 - SDLC should match project complexity (Lean for startups, Agile for general, Hybrid for enterprise)
 - QA approach should include testing strategies relevant to the tech stack`
 
-    const groq = createGroq({ apiKey: process.env.GROQ_API_KEY })
-    const { text } = await generateText({
-      model: groq("llama-3.1-8b-instant"),
-      prompt: prompt,
-      temperature: 0.2,
-    })
-
-    // Clean and parse the response
-    const cleanedText = text.trim()
-      .replace(/```json\s*/g, '').replace(/```\s*/g, '')
-    const aiData = JSON.parse(cleanedText)
+    const aiData: any = await generateJson(prompt, { tier: "quality" })
 
     // Validate structure
     if (aiData.projectMilestones && aiData.teamRoles) {
@@ -213,16 +198,7 @@ Guidelines:
 - Security areas should match the project's domain
 - Cost estimates should be realistic based on the project complexity`
 
-    const groq = createGroq({ apiKey: process.env.GROQ_API_KEY })
-    const { text } = await generateText({
-      model: groq("llama-3.1-8b-instant"),
-      prompt: prompt,
-      temperature: 0.2,
-    })
-
-    const cleanedText = text.trim()
-      .replace(/```json\s*/g, '').replace(/```\s*/g, '')
-    const aiData = JSON.parse(cleanedText)
+    const aiData: any = await generateJson(prompt, { tier: "quality" })
 
     if (aiData.techRoadmap && aiData.versionMilestones) {
       return {

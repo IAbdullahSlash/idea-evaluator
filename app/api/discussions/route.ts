@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { searchStories, threadComments } from '@/lib/hackernews'
-import { generateJson } from '@/lib/gemini'
+import { generateJson } from '@/lib/llm'
 
 /**
  * POST { query, idea } → up to 3 Hacker News discussions about the idea's
@@ -65,7 +65,7 @@ ${material}
 2. For each kept thread, write one or two plain sentences on what people said that matters for this idea (pain points, workarounds, tools they use, doubts). Use only what is in the comments; do not invent anything.
 3. Write one sentence on what the kept discussions together mean for the idea, or an empty string if you kept none.
 
-Respond with ONLY valid JSON: { "threads": [ { "index": 0, "says": "..." } ], "takeaway": "..." }`)
+Respond with ONLY valid JSON: { "threads": [ { "index": 0, "says": "..." } ], "takeaway": "..." }`, { tier: 'light' })
   } catch (error) {
     console.error('[discussions] Review failed:', error instanceof Error ? error.message : error)
     return NextResponse.json({ status: 'error', threads: [] })
