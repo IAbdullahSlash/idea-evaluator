@@ -49,9 +49,9 @@ export const snapshotSchema = z.object({
   }),
   aiVerdict: text,
   shortTitle: text,
-  // Search terms for the Summary stage, so GitHub and Reddit can start straight away
+  // Search terms for the Summary stage, so GitHub and Hacker News can start straight away
   searchQueries: z
-    .object({ github: z.string().trim().optional(), reddit: z.string().trim().optional() })
+    .object({ github: z.string().trim().optional(), discussions: z.string().trim().optional() })
     .optional(),
   selfQuestions: z
     .array(z.object({ question: text, why: z.string().trim().default('') }))

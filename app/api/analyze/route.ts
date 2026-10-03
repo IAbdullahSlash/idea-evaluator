@@ -74,7 +74,7 @@ Otherwise, respond with ONLY valid JSON:
   "aiVerdict": "Overall recommendation with clear next steps",
   "searchQueries": {
     "github": "2-4 keywords to find similar open-source projects on GitHub",
-    "reddit": "3-6 words describing the problem this idea solves, to find Reddit discussions (the problem, not a product name)"
+    "discussions": "2-3 plain words for the problem or kind of product, as a Hacker News post title would say it (e.g. medication reminder)"
   },
   "selfQuestions": [
     {

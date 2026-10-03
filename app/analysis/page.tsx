@@ -103,12 +103,12 @@ interface AnalysisData {
   executiveSummary?: string
   pros?: string[]
   cons?: string[]
-  redditQuery?: string
   scoreChange?: string
   riskSeverity?: Partial<Record<"technical" | "usability" | "market", string>>
   quickWins?: QuickWin[]
   existingSolutions?: ExistingSolution[]
-  searchQueries?: { github?: string; reddit?: string }
+  // `reddit` is the older name of the discussions query, kept for saved results
+  searchQueries?: { github?: string; discussions?: string; reddit?: string }
   projectTitle?: string
   projectDescription?: string
   contextAdjustment?: {
@@ -133,20 +133,21 @@ interface Clarification {
   answer: string
 }
 
-interface RedditThreadSummary {
+// A Hacker News discussion and what people said in it
+interface DiscussionThread {
   title: string
-  subreddit: string
   url: string
-  score: number
+  points: number
   numComments: number
+  year: number | null
   says: string | null
   topComment: string | null
 }
 
-interface RedditResult {
-  status: "ok" | "error" | "not-configured"
+interface DiscussionResult {
+  status: "ok" | "error"
   takeaway?: string | null
-  threads: RedditThreadSummary[]
+  threads: DiscussionThread[]
 }
 
 interface ExistingSolution {
@@ -227,7 +228,7 @@ export default function AnalysisPage() {
       quickWins: QuickWin[]
       existingSolutions: ExistingSolution[]
       githubRepos: GitHubRepo[]
-      reddit?: RedditResult
+      discussions?: DiscussionResult
       analysis?: AnalysisData
     }
     stage3?: {
@@ -560,8 +561,8 @@ export default function AnalysisPage() {
     }
   }
 
-  // 🔥 STAGE 2: Load the Summary. The detailed marking, GitHub and Reddit run in parallel;
-  // GitHub and Reddit use search terms the Snapshot already produced.
+  // 🔥 STAGE 2: Load the Summary. The detailed marking, GitHub and Hacker News run in parallel;
+  // GitHub and Hacker News use search terms the Snapshot already produced.
   const loadStage2Data = async () => {
     const fallbackQuery = analysis?.projectTitle || formData.idea.slice(0, 80)
 
@@ -584,17 +585,18 @@ export default function AnalysisPage() {
       .then((r) => (r.ok ? r.json() : null))
       .catch(() => null)
 
-    const redditPromise: Promise<RedditResult> = fetch("/api/reddit", {
+    const discussionsQuery = analysis?.searchQueries?.discussions || analysis?.searchQueries?.reddit || fallbackQuery
+    const discussionsPromise: Promise<DiscussionResult> = fetch("/api/discussions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query: analysis?.searchQueries?.reddit || fallbackQuery, idea: formData.idea }),
+      body: JSON.stringify({ query: discussionsQuery, idea: formData.idea }),
     })
       .then((r) => (r.ok ? r.json() : { status: "error", threads: [] }))
       .catch(() => ({ status: "error", threads: [] }))
 
-    const [summary, reddit, repos] = await Promise.all([
+    const [summary, discussions, repos] = await Promise.all([
       summaryPromise,
-      redditPromise,
+      discussionsPromise,
       fetchGitHubRepos(analysis?.searchQueries?.github || fallbackQuery),
     ])
     if (!summary) throw new Error("The summary couldn't be written this time. Please try again.")
@@ -605,7 +607,7 @@ export default function AnalysisPage() {
         quickWins: summary.quickWins ?? [],
         existingSolutions: summary.existingSolutions ?? [],
         githubRepos: repos,
-        reddit,
+        discussions,
         analysis: summary,
       },
     }))
@@ -1229,7 +1231,7 @@ export default function AnalysisPage() {
       ? s2.pros
       : [s2?.keyStrengths?.valueProposition, s2?.keyStrengths?.marketFit].filter((t): t is string => !isPlaceholder(t))
     const cons = s2?.cons ?? []
-    const reddit = stageData.stage2.reddit
+    const discussions = stageData.stage2.discussions
     const users = stageData.stage1?.targetUsersMarketFit?.primaryUsers || analysis.targetUsersMarketFit?.primaryUsers
     const demand = stageData.stage1?.targetUsersMarketFit?.marketDemand || analysis.targetUsersMarketFit?.marketDemand
     const executiveSummary = s2?.executiveSummary || s2?.honestAiFeedback
@@ -1338,15 +1340,13 @@ export default function AnalysisPage() {
 
         <SheetRow
           margin={
-            !reddit || reddit.status === "not-configured" ? (
-              <MarginNote mark={<Query />} title="Reddit not connected">Real threads appear here once Reddit is connected.</MarginNote>
-            ) : reddit.status === "error" ? (
-              <MarginNote mark={<Query />} title="Reddit unavailable">Couldn&apos;t reach Reddit this time.</MarginNote>
-            ) : reddit.threads.length === 0 ? (
-              <MarginNote mark={<Query />} title="No threads found">Nobody is discussing this problem on Reddit, or it is phrased differently there.</MarginNote>
+            !discussions || discussions.status === "error" ? (
+              <MarginNote mark={<Query />} title="Discussions unavailable">Couldn&apos;t load discussions this time.</MarginNote>
+            ) : discussions.threads.length === 0 ? (
+              <MarginNote mark={<Query />} title="No discussions found">Nobody on Hacker News has discussed this problem directly, or they phrase it differently.</MarginNote>
             ) : (
-              <MarginNote mark={<Query />} title={`${plural(reddit.threads.length, "thread")} on Reddit`}>
-                {reddit.takeaway || "Read what people say before you decide."}
+              <MarginNote mark={<Query />} title={`${plural(discussions.threads.length, "discussion")} found`}>
+                {discussions.takeaway || "Read what people said before you decide."}
               </MarginNote>
             )
           }
@@ -1363,20 +1363,18 @@ export default function AnalysisPage() {
             </div>
           </dl>
 
-          <p className="label-caps mt-7">Top Reddit threads</p>
-          {!reddit || reddit.status === "not-configured" ? (
-            <EmptyLine>Reddit isn&apos;t connected yet, so no threads are shown.</EmptyLine>
-          ) : reddit.status === "error" ? (
-            <EmptyLine>Reddit couldn&apos;t be reached. Try again later.</EmptyLine>
-          ) : reddit.threads.length === 0 ? (
-            <EmptyLine>No Reddit threads found for this idea.</EmptyLine>
+          <p className="label-caps mt-7">Discussions on Hacker News</p>
+          {!discussions || discussions.status === "error" ? (
+            <EmptyLine>Discussions couldn&apos;t be loaded. Try again later.</EmptyLine>
+          ) : discussions.threads.length === 0 ? (
+            <EmptyLine>No relevant discussions found for this idea.</EmptyLine>
           ) : (
             <ol className="mt-2 divide-y divide-rule">
-              {reddit.threads.map((t, i) => (
+              {discussions.threads.map((t, i) => (
                 <li key={i} className="py-4 first:pt-1 last:pb-0">
                   <LinkTitle href={t.url}>{t.title}</LinkTitle>
                   <p className="mt-0.5 text-meta text-pencil tabular">
-                    r/{t.subreddit} · {t.score.toLocaleString()} upvotes · {t.numComments.toLocaleString()} comments
+                    {t.points.toLocaleString()} points · {t.numComments.toLocaleString()} comments{t.year ? ` · ${t.year}` : ""}
                   </p>
                   {t.says ? (
                     <p className="mt-1.5 max-w-[70ch] text-[0.9375rem] leading-relaxed text-ink">{t.says}</p>
