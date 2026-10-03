@@ -1,13 +1,12 @@
 /*
- * The contents page: five pages, each producing something you keep.
+ * The contents page: four pages, each producing something you keep.
  * The numbering carries information here: the pages unlock in order.
  */
 const contents = [
   { n: 1, page: "Snapshot", gives: "A feasibility score out of 10, your odds of finishing, difficulty, and an honest reality check." },
-  { n: 2, page: "Summary", gives: "Strengths, risks, scope, a suggested stack, research papers, and existing projects like yours." },
-  { n: 3, page: "Roadmap", gives: "Phases with deliverables, the team you need, and how to test it." },
-  { n: 4, page: "Tech plan", gives: "Technology layers and readiness, versions, security, and a cost estimate." },
-  { n: 5, page: "Hand-off", gives: "A printable report and links to people who can help you build it." },
+  { n: 2, page: "Summary", gives: "Strengths, risks, scope, a suggested stack, and existing projects like yours." },
+  { n: 3, page: "Plan", gives: "Phases with deliverables, the team you need, how to test it, the tools for each layer, security, and a cost estimate." },
+  { n: 4, page: "Hand-off", gives: "A printable report and links to people who can help you build it." },
 ]
 
 export function HowItWorks() {
@@ -16,7 +15,7 @@ export function HowItWorks() {
       <div className="mx-auto grid max-w-6xl gap-10 px-4 py-16 sm:px-6 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:gap-16 lg:py-24">
         <div>
           <h2 className="text-[2rem] font-semibold leading-tight tracking-[-0.03em] text-ink sm:text-[2.5rem]">
-            Five pages, one plan
+            Four pages, one plan
           </h2>
           <p className="mt-4 text-[1.0625rem] leading-relaxed text-ink-soft">
             Each page builds on the one before it. You choose whether to turn the page, so you never plan an idea that

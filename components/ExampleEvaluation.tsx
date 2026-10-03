@@ -17,7 +17,7 @@ const idea =
 const pages = [
   { id: "snapshot", label: "Snapshot" },
   { id: "summary", label: "Summary" },
-  { id: "roadmap", label: "Roadmap" },
+  { id: "roadmap", label: "Plan" },
 ] as const
 type PageId = (typeof pages)[number]["id"]
 
@@ -208,7 +208,7 @@ function RoadmapPage() {
         margin={<MarginNote mark={<Tick />} title={`${totalWeeks} weeks in total`}>Fits a 14-week term with 3 weeks spare.</MarginNote>}
       >
         <p className="max-w-[60ch] text-[0.9375rem] leading-relaxed text-ink-soft">
-          The real roadmap also lists the team you need, how to test it, the technology for each layer, and what it costs.
+          The real plan also lists the team you need, how to test it, the tools for each layer, security, and what it costs.
         </p>
       </SheetRow>
     </>

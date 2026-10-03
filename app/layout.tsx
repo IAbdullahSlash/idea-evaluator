@@ -4,8 +4,6 @@ import { GeistMono } from "geist/font/mono"
 import { Kalam } from "next/font/google"
 import "./globals.css"
 import { ThemeProvider } from "@/components/ThemeProvider"
-import { AIAssistantProvider } from "@/contexts/AIAssistantContext"
-import { AIAssistantManager } from "@/components/AIAssistantManager"
 
 // The examiner's hand: used only for scores and short margin marks.
 const hand = Kalam({
@@ -47,10 +45,7 @@ export default function RootLayout({
     >
       <body>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-          <AIAssistantProvider>
-            {children}
-            <AIAssistantManager />
-          </AIAssistantProvider>
+          {children}
         </ThemeProvider>
       </body>
     </html>

@@ -10,7 +10,10 @@ function getGeminiKeys(): string[] {
 
 function getGenerativeModel(apiKey: string) {
   const genAI = new GoogleGenerativeAI(apiKey)
-  return genAI.getGenerativeModel({ model: 'gemini-3.5-flash' })
+  return genAI.getGenerativeModel({
+    model: 'gemini-3.5-flash',
+    generationConfig: { responseMimeType: 'application/json' },
+  })
 }
 
 // Intent validation is shared via lib/validation.ts (see validateIdea).
@@ -20,7 +23,7 @@ const stagePrompts: Record<string, string> = {
   stage1: `You are a senior technical consultant providing an honest reality check for a project idea.
 
 PROJECT TO ANALYZE: "{idea}"
-
+{clarifications}
 CONTEXT PROVIDED BY DEVELOPER:
 - Domain: {domain}
 - Project Type: {projectType}
@@ -46,10 +49,12 @@ IMPORTANT:
 - Be brutally honest and realistic
 - Focus on practical implementation challenges
 - Consider market realities and competition
-- Keep total response under 250 words
+- Keep the prose fields under 250 words in total
 - Use clear, direct language without fluff
 
-Respond with ONLY valid JSON:
+{clarityRule}
+
+Otherwise, respond with ONLY valid JSON:
 {
   "feasibilityScore": number (1-10),
   "difficultyLevel": "Beginner" | "Intermediate" | "Advanced",
@@ -62,12 +67,21 @@ Respond with ONLY valid JSON:
     "marketDemand": "Assess the current market demand for this solution",
     "userValidation": "Describe how users would validate this idea"
   },
-  "aiVerdict": "Overall recommendation with clear next steps"
-}`,
+  "aiVerdict": "Overall recommendation with clear next steps",
+  "selfQuestions": [
+    {
+      "question": "A question the developer must answer for themselves to make THIS idea clearer (about its users, scope, core feature, data, or constraints). Specific to this idea, never generic.",
+      "why": "One short sentence on what the answer decides"
+    }
+  ]
+}
+
+Give 4 to 5 selfQuestions.`,
 
   stage2: `You are a senior technical consultant providing detailed executive analysis for a validated project idea.
 
 PROJECT TO ANALYZE: "{idea}"
+{clarifications}
 
 Provide a comprehensive analysis focusing on these key areas:
 
@@ -121,6 +135,52 @@ Respond with ONLY valid JSON:
   "recommendations": ["List 3-5 actionable recommendations for next steps"],
   "similarProjects": ["List 2-3 existing projects or companies with similar ideas"]
 }`
+}
+
+type Clarification = { question: string; answer: string }
+
+const MAX_QUESTIONS = 3
+const MAX_ANSWER_LENGTH = 500
+
+// Asked only on the first attempt: a vague idea gets questions instead of a mark.
+const CLARITY_RULE = `BEFORE MARKING: IS THE IDEA CLEAR ENOUGH?
+Only ask for clarification if a fair examiner genuinely cannot judge feasibility because the idea is missing at least one of: what it actually does, who it is for, or what form it takes (app, website, device, model, etc.). If the idea is reasonably clear, do NOT ask; mark it.
+If it is not clear enough, respond with ONLY this JSON and nothing else:
+{
+  "needsClarification": true,
+  "questions": [
+    { "question": "A short, specific question answerable in one line", "why": "One short sentence on why the answer changes the mark" }
+  ]
+}
+Ask at most ${MAX_QUESTIONS} questions.`
+
+// Once the developer has answered (or skipped), the idea is always marked.
+const NO_MORE_QUESTIONS =
+  'The idea has already been clarified. Do NOT ask for clarification; mark it now, treating unanswered questions as unknowns.'
+
+function parseClarifications(raw: unknown): Clarification[] | null {
+  if (!Array.isArray(raw)) return null
+  return raw
+    .slice(0, MAX_QUESTIONS)
+    .filter((c): c is Clarification => Boolean(c) && typeof c.question === 'string')
+    .map((c) => ({
+      question: c.question.slice(0, 300),
+      answer: typeof c.answer === 'string' ? c.answer.trim().slice(0, MAX_ANSWER_LENGTH) : '',
+    }))
+}
+
+function clarificationBlock(clarifications: Clarification[] | null): string {
+  if (!clarifications || clarifications.length === 0) return ''
+  const lines = clarifications.map((c) => `- Q: ${c.question}\n  A: ${c.answer || '(no answer)'}`)
+  return `\nCLARIFICATIONS FROM THE DEVELOPER (answers to earlier questions):\n${lines.join('\n')}\n`
+}
+
+function cleanQuestions(raw: unknown, max: number): { question: string; why: string }[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .filter((q) => q && typeof q.question === 'string' && q.question.trim())
+    .slice(0, max)
+    .map((q) => ({ question: q.question.trim(), why: typeof q.why === 'string' ? q.why.trim() : '' }))
 }
 
 function applyContextAwareScoring(analysis: any, originalIdea: string) {
@@ -182,7 +242,9 @@ async function callGemini(apiKey: string, prompt: string): Promise<string> {
 
 export async function POST(request: NextRequest) {
   try {
-    const { idea, stage = 'stage1', domain, projectType, experience, timeline } = await request.json()
+    const { idea, stage = 'stage1', domain, projectType, experience, timeline, clarifications: rawClarifications } =
+      await request.json()
+    const clarifications = parseClarifications(rawClarifications)
 
     if (!idea) {
       return NextResponse.json({ error: 'Idea is required' }, { status: 400 })
@@ -206,6 +268,8 @@ export async function POST(request: NextRequest) {
       .replace('{projectType}', projectType || 'Not specified')
       .replace('{experience}', experience || 'Not specified')
       .replace('{timeline}', timeline || 'Not specified')
+      .replace('{clarifications}', clarificationBlock(clarifications))
+      .replace('{clarityRule}', clarifications ? NO_MORE_QUESTIONS : CLARITY_RULE)
 
     // 🚀 Try each Gemini API key until one works
     const apiKeys = getGeminiKeys()
@@ -258,6 +322,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // 🚀 CLARIFICATION GATE: stage 1 only, and only before the developer has answered
+    if (analysis?.needsClarification) {
+      const questions = cleanQuestions(analysis.questions, MAX_QUESTIONS)
+      if (stage === 'stage1' && !clarifications && questions.length > 0) {
+        return NextResponse.json({ needsClarification: true, questions })
+      }
+      console.error('[analyze] Model asked for clarification after the idea was clarified')
+      return NextResponse.json({ error: 'AI analysis failed. Please try again.' }, { status: 502 })
+    }
+
     // 🚀 APPLY CONTEXT-AWARE SCORING
     const finalAnalysis = applyContextAwareScoring(analysis, idea)
 
@@ -301,6 +375,7 @@ export async function POST(request: NextRequest) {
         phase3: { title: 'Phase 3', duration: 'TBD', tasks: [] }
       },
       recommendations: finalAnalysis.recommendations || [],
+      selfQuestions: cleanQuestions(finalAnalysis.selfQuestions, 5),
       similarProjects: finalAnalysis.similarProjects || [],
     }
 

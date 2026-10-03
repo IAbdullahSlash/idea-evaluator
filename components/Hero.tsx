@@ -12,9 +12,8 @@ import { Underline } from "@/components/script/marks"
 const pages = [
   { n: 1, name: "Snapshot", asks: "Is it worth building?" },
   { n: 2, name: "Summary", asks: "What works, and what could sink it?" },
-  { n: 3, name: "Roadmap", asks: "What are the phases, and who does what?" },
-  { n: 4, name: "Tech plan", asks: "Which tools, and what will it cost?" },
-  { n: 5, name: "Hand-off", asks: "How do I take this further?" },
+  { n: 3, name: "Plan", asks: "What are the phases, who does what, and what will it cost?" },
+  { n: 4, name: "Hand-off", asks: "How do I take this further?" },
 ]
 
 export function Hero() {

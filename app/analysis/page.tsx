@@ -6,8 +6,6 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { SelectionTooltip } from "@/components/SelectionTooltip"
-import { useAIAssistant } from "@/contexts/AIAssistantContext"
 import { validateIdea } from "@/lib/validation"
 import { fetchWithFallback } from "@/lib/fetch-with-fallback"
 import { cn } from "@/lib/utils"
@@ -19,11 +17,9 @@ import {
   MoreHorizontal,
   Download,
   Edit3,
-  PenLine,
   FileText,
   Link as LinkIcon,
   Loader2,
-  MessageCircle,
   RefreshCw,
   Star,
 } from "lucide-react"
@@ -32,7 +28,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { AppBar } from "@/components/script/app-bar"
@@ -46,9 +41,8 @@ enum AnalysisStage {
   INPUT = 0,
   QUICK_SNAPSHOT = 1,
   EXECUTIVE_SUMMARY = 2,
-  ROADMAPS = 3,
-  TECH_ROADMAP = 4,
-  DEEP_RESOURCES = 5
+  PLAN = 3,
+  HAND_OFF = 4
 }
 
 
@@ -99,6 +93,7 @@ interface AnalysisData {
   similarProjects: string[]
   aiVerdict?: string
   honestRealityCheck?: string
+  selfQuestions?: GuidingQuestion[]
   projectTitle?: string
   projectDescription?: string
   contextAdjustment?: {
@@ -112,11 +107,15 @@ interface AnalysisData {
 }
 
 // 🚀 NEW INTERFACES FOR STAGED DATA
-interface ExpertArticle {
-  title: string
-  url: string
-  source: string
-  summary: string
+// A question with a one-line reason: used for follow-up questions and "questions to ask yourself".
+interface GuidingQuestion {
+  question: string
+  why: string
+}
+
+interface Clarification {
+  question: string
+  answer: string
 }
 
 interface ExistingSolution {
@@ -194,7 +193,6 @@ export default function AnalysisPage() {
     stage1?: AnalysisData
     stage2?: {
       quickWins: QuickWin[]
-      expertArticles: ExpertArticle[]
       existingSolutions: ExistingSolution[]
       githubRepos: GitHubRepo[]
       analysis?: AnalysisData
@@ -222,17 +220,9 @@ export default function AnalysisPage() {
   const [analysis, setAnalysis] = useState<AnalysisData | null>(null)
   const [loading, setLoading] = useState(false)
   const [taskProgress, setTaskProgress] = useState<TaskProgress>({})
-  const [showRefinementTools, setShowRefinementTools] = useState(false)
-  const [refinementLoading, setRefinementLoading] = useState(false)
-  const [refinementSuggestions, setRefinementSuggestions] = useState<string[]>([])
   const [exportLoading, setExportLoading] = useState(false)
   const [githubRepos, setGithubRepos] = useState<GitHubRepo[]>([])
   const [githubLoading, setGithubLoading] = useState(false)
-  const [projectModifications, setProjectModifications] = useState({
-    title: "",
-    description: "",
-  })
-  const { setProjectContext, openAssistant } = useAIAssistant()
 
   // Simplified form data - only idea description needed
   const [formData, setFormData] = useState({
@@ -243,6 +233,11 @@ export default function AnalysisPage() {
     timeline: '',
   })
   const [analyzing, setAnalyzing] = useState(false)
+  // Follow-up questions, asked when the idea is too vague to mark
+  const [clarifyQuestions, setClarifyQuestions] = useState<GuidingQuestion[] | null>(null)
+  const [clarifyAnswers, setClarifyAnswers] = useState<string[]>([])
+  // The answers the idea was marked with; later stages receive them too
+  const [clarifications, setClarifications] = useState<Clarification[] | null>(null)
 
   // 🚀 LOCAL STORAGE HYDRATION — restore progress after page refresh
   useEffect(() => {
@@ -251,7 +246,7 @@ export default function AnalysisPage() {
       if (savedStage !== null) {
         const stageNum = parseInt(savedStage, 10) as AnalysisStage
         if (stageNum >= AnalysisStage.QUICK_SNAPSHOT) {
-          setCurrentStage(stageNum)
+          setCurrentStage(stageNum <= AnalysisStage.HAND_OFF ? stageNum : AnalysisStage.QUICK_SNAPSHOT)
         }
       }
       const savedAnalysis = localStorage.getItem("projectAnalysis")
@@ -392,7 +387,7 @@ export default function AnalysisPage() {
   // 🛡️ Client-side guardrail check is handled by validateIdea (imported from lib/validation)
 
   // 🚀 STAGE 1: QUICK SNAPSHOT
-  const handleAnalyzeIdea = async (e?: React.FormEvent) => {
+  const handleAnalyzeIdea = async (e?: React.FormEvent, answered?: Clarification[]) => {
     if (e) e.preventDefault()
 
     if (!formData.idea.trim()) return
@@ -416,11 +411,22 @@ export default function AnalysisPage() {
           projectType: formData.projectType,
           experience: formData.experience,
           timeline: formData.timeline,
+          clarifications: answered,
         }),
       })
 
       if (response.ok) {
         const rawAnalysisData = await response.json()
+
+        // Too vague to mark: show the follow-up questions and stay on the input page
+        if (rawAnalysisData.needsClarification && !answered) {
+          const questions: GuidingQuestion[] = rawAnalysisData.questions || []
+          setClarifyQuestions(questions)
+          setClarifyAnswers(questions.map(() => ""))
+          return
+        }
+        setClarifications(answered ?? null)
+        setClarifyQuestions(null)
         
         // 🔧 Apply validation and fallbacks
         const validatedAnalysisData = validateAnalysisData(rawAnalysisData)
@@ -435,14 +441,6 @@ export default function AnalysisPage() {
         setStageData(prev => ({ ...prev, stage1: enhancedAnalysis }))
         localStorage.setItem("projectAnalysis", JSON.stringify(enhancedAnalysis))
         localStorage.setItem("currentStage", AnalysisStage.QUICK_SNAPSHOT.toString())
-        
-        // Update AI Assistant context
-        setProjectContext(`${enhancedAnalysis.projectTitle}: ${enhancedAnalysis.projectDescription}`)
-        
-        setProjectModifications({
-          title: enhancedAnalysis.projectTitle || "",
-          description: enhancedAnalysis.projectDescription || "",
-        })
         
         // Move to Stage 1
         setCurrentStage(AnalysisStage.QUICK_SNAPSHOT)
@@ -471,14 +469,11 @@ export default function AnalysisPage() {
         case AnalysisStage.EXECUTIVE_SUMMARY:
           await loadStage2Data()
           break
-        case AnalysisStage.ROADMAPS:
-          await loadStage3Data()
+        case AnalysisStage.PLAN:
+          await loadPlanData()
           break
-        case AnalysisStage.TECH_ROADMAP:
-          await loadStage4Data()
-          break
-        case AnalysisStage.DEEP_RESOURCES:
-          await loadStage5Data()
+        case AnalysisStage.HAND_OFF:
+          await loadHandOffData()
           break
       }
       setCurrentStage(targetStage)
@@ -497,7 +492,7 @@ export default function AnalysisPage() {
     const analysisResponse = await fetch("/api/analyze", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ idea: formData.idea, stage: 'stage2' }),
+      body: JSON.stringify({ idea: formData.idea, stage: 'stage2', clarifications: clarifications ?? [] }),
     })
     if (analysisResponse.ok) {
       stage2Analysis = await analysisResponse.json()
@@ -510,10 +505,10 @@ export default function AnalysisPage() {
         body: JSON.stringify({ stage: 2, analysis, idea: formData.idea }),
       }),
       async () => {
-        const [quickWins, expertArticles, existingSolutions] = await Promise.all([
-          generateQuickWins(), fetchExpertArticles(), fetchExistingSolutions()
+        const [quickWins, existingSolutions] = await Promise.all([
+          generateQuickWins(), fetchExistingSolutions()
         ])
-        return { quickWins, expertArticles, existingSolutions, githubRepos: [] }
+        return { quickWins, existingSolutions, githubRepos: [] }
       },
       "Stage 2 content"
     )
@@ -532,7 +527,7 @@ export default function AnalysisPage() {
       const response = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idea: formData.idea, stage: 'stage1' }),
+        body: JSON.stringify({ idea: formData.idea, stage: 'stage1', clarifications: clarifications ?? [] }),
       })
 
       if (response.ok) {
@@ -565,7 +560,7 @@ export default function AnalysisPage() {
       const analysisResponse = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idea: formData.idea, stage: 'stage2' }),
+        body: JSON.stringify({ idea: formData.idea, stage: 'stage2', clarifications: clarifications ?? [] }),
       })
 
       let stage2Analysis = null
@@ -574,9 +569,8 @@ export default function AnalysisPage() {
       }
 
       // Regenerate Stage 2 Content
-      const [quickWins, expertArticles, existingSolutions, repos] = await Promise.all([
+      const [quickWins, existingSolutions, repos] = await Promise.all([
         generateQuickWins(),
-        fetchExpertArticles(),
         fetchExistingSolutions(),
         fetchGitHubRepos(analysis?.projectTitle || formData.idea)
       ])
@@ -585,7 +579,6 @@ export default function AnalysisPage() {
         ...prev,
         stage2: { 
           quickWins, 
-          expertArticles, 
           existingSolutions, 
           githubRepos: repos,
           analysis: stage2Analysis
@@ -599,52 +592,24 @@ export default function AnalysisPage() {
     }
   }
 
-  const regenerateStage3 = async () => {
-    setLoading(true)
-    try {
-      // Regenerate Stage 3 Data
-      const projectMilestones = generateProjectMilestones()
-      const teamRoles = generateTeamRoles()
-      const sdlcMapping = generateSDLCMapping()
-      const qaApproach = generateQAApproach()
+  // The plan's two halves: the roadmap (milestones, team, process) and the tech plan.
+  const splitPlan = (data: any) => ({
+    stage3: {
+      projectMilestones: data.projectMilestones,
+      teamRoles: data.teamRoles,
+      sdlcMapping: data.sdlcMapping,
+      qaApproach: data.qaApproach,
+    },
+    stage4: {
+      techRoadmap: data.techRoadmap,
+      versionMilestones: data.versionMilestones,
+      securityConsiderations: data.securityConsiderations,
+      costEstimates: data.costEstimates,
+    },
+  })
 
-      setStageData(prev => ({
-        ...prev,
-        stage3: { projectMilestones, teamRoles, sdlcMapping, qaApproach }
-      }))
-    } catch (error) {
-      console.error("[Regenerate] Stage 3 regeneration failed:", error)
-      alert("Failed to regenerate Stage 3. Please try again.")
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const regenerateStage4 = async () => {
-    setLoading(true)
-    try {
-      const response = await fetch("/api/stage-data", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stage: 4, analysis }),
-      })
-      if (response.ok) {
-        const data = await response.json()
-        setStageData(prev => ({ ...prev, stage4: data }))
-      } else {
-        throw new Error("Failed to regenerate Stage 4")
-      }
-    } catch (error) {
-      console.error("[Regenerate] Stage 4 regeneration failed:", error)
-      alert("Failed to regenerate Stage 4. Please try again.")
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // 🔥 STAGE 3: Load Roadmaps Data
-  const loadStage3Data = async () => {
-    const stage3Data = await fetchWithFallback(
+  const fetchPlan = () =>
+    fetchWithFallback(
       () => fetch("/api/stage-data", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -655,38 +620,40 @@ export default function AnalysisPage() {
         teamRoles: generateTeamRoles(),
         sdlcMapping: generateSDLCMapping(),
         qaApproach: generateQAApproach(),
-      }),
-      "Stage 3 data"
-    )
-    setStageData(prev => ({ ...prev, stage3: stage3Data }))
-  }
-
-  // 🔥 STAGE 4: Load Technology Roadmap Data
-  const loadStage4Data = async () => {
-    const stage4Data = await fetchWithFallback(
-      () => fetch("/api/stage-data", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stage: 4, analysis }),
-      }),
-      async () => ({
         techRoadmap: generateTechRoadmap(),
         versionMilestones: generateVersionMilestones(),
         securityConsiderations: generateSecurityConsiderations(),
         costEstimates: generateCostEstimates(),
       }),
-      "Stage 4 data"
+      "Plan data"
     )
-    setStageData(prev => ({ ...prev, stage4: stage4Data }))
+
+  // 🔥 STAGE 3: Load the plan (roadmap + tech plan in one request)
+  const loadPlanData = async () => {
+    const data = await fetchPlan()
+    setStageData(prev => ({ ...prev, ...splitPlan(data) }))
   }
 
-  // 🔥 STAGE 5: Load Deep Resources Data
-  const loadStage5Data = async () => {
-    const stage5Data = await fetchWithFallback(
+  const regeneratePlan = async () => {
+    setLoading(true)
+    try {
+      const data = await fetchPlan()
+      setStageData(prev => ({ ...prev, ...splitPlan(data) }))
+    } catch (error) {
+      console.error("[Regenerate] Plan regeneration failed:", error)
+      alert("Failed to regenerate the plan. Please try again.")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 🔥 STAGE 4: Load Hand-off Data
+  const loadHandOffData = async () => {
+    const handOffData = await fetchWithFallback(
       () => fetch("/api/stage-data", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stage: 5, analysis }),
+        body: JSON.stringify({ stage: 4, analysis }),
       }),
       async () => ({
         jiraIntegration: false,
@@ -694,25 +661,23 @@ export default function AnalysisPage() {
         freelancerLinks: generateFreelancerLinks(),
         srsDocument: null,
       }),
-      "Stage 5 data"
+      "Hand-off data"
     )
-    setStageData(prev => ({ ...prev, stage5: stage5Data }))
+    setStageData(prev => ({ ...prev, stage5: handOffData }))
   }
 
   // 🎨 STAGE RENDERING COMPONENTS
   const renderStageContent = () => {
     switch (currentStage) {
       case AnalysisStage.INPUT:
-        return renderInputStage()
+        return clarifyQuestions ? renderClarify() : renderInputStage()
       case AnalysisStage.QUICK_SNAPSHOT:
         return renderQuickSnapshot()
       case AnalysisStage.EXECUTIVE_SUMMARY:
         return renderExecutiveSummary()
-      case AnalysisStage.ROADMAPS:
-        return renderRoadmaps()
-      case AnalysisStage.TECH_ROADMAP:
-        return renderTechRoadmap()
-      case AnalysisStage.DEEP_RESOURCES:
+      case AnalysisStage.PLAN:
+        return renderPlan()
+      case AnalysisStage.HAND_OFF:
         return renderDeepResources()
       default:
         return renderInputStage()
@@ -941,6 +906,94 @@ export default function AnalysisPage() {
     </form>
   )
 
+  // 🎨 FOLLOW-UP QUESTIONS: the idea was too vague to mark
+  const renderClarify = () => {
+    if (!clarifyQuestions) return null
+    const withAnswers = (answers: string[]): Clarification[] =>
+      clarifyQuestions.map((q, i) => ({ question: q.question, answer: answers[i] ?? "" }))
+
+    return (
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          handleAnalyzeIdea(undefined, withAnswers(clarifyAnswers))
+        }}
+      >
+        <Sheet>
+          <SheetRow
+            marginFirstOnMobile
+            marginLabel="Examiner's note"
+            margin={
+              <MarginNote mark={<Query />} title="Not enough to mark yet">
+                Answer what you can. Anything you leave blank is marked as unknown.
+              </MarginNote>
+            }
+          >
+            <h1 className="text-[1.5rem] font-semibold tracking-[-0.02em] text-ink sm:text-[1.75rem]">
+              A few questions before it&apos;s marked
+            </h1>
+            <p className="label-caps mt-6">Your idea</p>
+            <p className="mt-2 max-w-[65ch] text-[1.0625rem] leading-8 text-ink-soft">{formData.idea}</p>
+          </SheetRow>
+
+          {clarifyQuestions.map((q, i) => (
+            <SheetRow
+              key={i}
+              marginDesktopOnly
+              margin={q.why ? <MarginNote>{q.why}</MarginNote> : null}
+            >
+              <Label htmlFor={`clarify-${i}`} className="flex gap-3 text-[1.0625rem] font-semibold leading-snug text-ink">
+                <span className="font-hand text-[1.35rem] font-bold leading-none text-marker tabular">{i + 1}</span>
+                <span>{q.question}</span>
+              </Label>
+              {q.why ? <p className="mt-1.5 pl-7 text-meta text-pencil lg:hidden">{q.why}</p> : null}
+              <Textarea
+                id={`clarify-${i}`}
+                rows={2}
+                placeholder="Your answer"
+                value={clarifyAnswers[i] ?? ""}
+                onChange={(e) => {
+                  const value = e.target.value
+                  setClarifyAnswers((prev) => prev.map((a, j) => (j === i ? value : a)))
+                }}
+                className="ruled mt-3 min-h-[4rem] resize-none rounded-none border-0 border-b border-rule bg-transparent px-0 py-1.5 text-[1.0625rem] leading-8 text-ink shadow-none placeholder:text-pencil/80 focus-visible:border-marker focus-visible:ring-0 md:text-[1.0625rem] dark:bg-transparent"
+              />
+            </SheetRow>
+          ))}
+
+          <SheetRow
+            divider={false}
+            marginLabel="Next"
+            margin={
+              <div className="space-y-2">
+                <Button type="submit" size="lg" disabled={analyzing} className="h-11 w-full justify-between px-4 text-[0.9375rem]">
+                  {analyzing ? "Marking your idea…" : "Mark with these answers"}
+                  {analyzing ? <Loader2 className="animate-spin" /> : <ArrowRight />}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  disabled={analyzing}
+                  className="w-full"
+                  onClick={() => handleAnalyzeIdea(undefined, withAnswers([]))}
+                >
+                  Mark it anyway
+                </Button>
+              </div>
+            }
+          >
+            <p className="max-w-[60ch] text-[0.9375rem] leading-relaxed text-ink-soft">
+              Rather rewrite the idea itself?
+            </p>
+            <Button type="button" variant="outline" className="mt-3" onClick={() => setClarifyQuestions(null)} disabled={analyzing}>
+              <Edit3 /> Edit the idea
+            </Button>
+          </SheetRow>
+        </Sheet>
+      </form>
+    )
+  }
+
   // 🎨 WHILE THE EXAMINER READS
   const renderMarking = () => (
     <Sheet aria-busy="true" aria-live="polite">
@@ -1001,6 +1054,18 @@ export default function AnalysisPage() {
             {analysis.detectedDomain ? <Fact label="Domain">{analysis.detectedDomain}</Fact> : null}
             {analysis.requiredExperience ? <Fact label="Experience needed">{analysis.requiredExperience}</Fact> : null}
           </dl>
+          {clarifications && clarifications.some((c) => c.answer) ? (
+            <dl className="mt-6 space-y-3 border-t border-rule pt-4">
+              {clarifications
+                .filter((c) => c.answer)
+                .map((c, i) => (
+                  <div key={i}>
+                    <dt className="text-meta text-pencil">{c.question}</dt>
+                    <dd className="mt-0.5 text-[0.9375rem] text-ink">{c.answer}</dd>
+                  </div>
+                ))}
+            </dl>
+          ) : null}
         </SheetRow>
 
         <SheetRow
@@ -1050,13 +1115,37 @@ export default function AnalysisPage() {
           </dl>
         </SheetRow>
 
+        {analysis.selfQuestions && analysis.selfQuestions.length > 0 ? (
+          <SheetRow
+            marginLabel="Examiner's note"
+            margin={
+              <MarginNote mark={<Query />} title={`${plural(analysis.selfQuestions.length, "question")} for you`}>
+                If you can&apos;t answer one, that is the next thing to find out.
+              </MarginNote>
+            }
+          >
+            <SheetHeading>Questions to ask yourself</SheetHeading>
+            <ol className="max-w-[68ch] space-y-4">
+              {analysis.selfQuestions.map((q, i) => (
+                <li key={i} className="grid grid-cols-[1.25rem_minmax(0,1fr)] gap-x-3">
+                  <span className="font-hand text-[1.35rem] font-bold leading-none text-marker tabular">{i + 1}</span>
+                  <div>
+                    <p className="text-base font-medium leading-snug text-ink">{q.question}</p>
+                    {q.why ? <p className="mt-1 text-sm leading-relaxed text-ink-soft">{q.why}</p> : null}
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </SheetRow>
+        ) : null}
+
         <SheetRow
           marginLabel="Next"
           margin={
             <ContinueButton
               to={AnalysisStage.EXECUTIVE_SUMMARY}
               label="Continue to summary"
-              hint="Next: strengths, risks, research papers, and existing projects like yours."
+              hint="Next: strengths, risks, scope, and existing projects like yours."
             />
           }
         >
@@ -1270,31 +1359,6 @@ export default function AnalysisPage() {
 
         <SheetRow
           margin={
-            stageData.stage2.expertArticles.length > 0 ? (
-              <MarginNote mark={<Query />} title={plural(stageData.stage2.expertArticles.length, "source")}>Read the abstracts before you claim it&apos;s new.</MarginNote>
-            ) : (
-              <MarginNote mark={<Query />} title="Nothing found">No papers matched. Search Google Scholar yourself before calling it new.</MarginNote>
-            )
-          }
-        >
-          <SheetHeading>What researchers have published</SheetHeading>
-          {stageData.stage2.expertArticles.length === 0 ? (
-            <EmptyLine>No papers found for this idea.</EmptyLine>
-          ) : (
-            <ul className="divide-y divide-rule">
-              {stageData.stage2.expertArticles.map((article, index) => (
-                <li key={index} className="py-3 first:pt-0 last:pb-0">
-                  <LinkTitle href={article.url}>{article.title}</LinkTitle>
-                  <p className="mt-0.5 text-meta text-pencil">{article.source}</p>
-                  <p className="mt-1 line-clamp-2 max-w-[75ch] text-sm leading-relaxed text-ink-soft">{article.summary}</p>
-                </li>
-              ))}
-            </ul>
-          )}
-        </SheetRow>
-
-        <SheetRow
-          margin={
             stageData.stage2.existingSolutions.length > 0 ? (
               <MarginNote mark={<Query />} title={`${stageData.stage2.existingSolutions.length} already out there`}>Be ready to say how yours is different.</MarginNote>
             ) : (
@@ -1350,30 +1414,31 @@ export default function AnalysisPage() {
           marginLabel="Next"
           margin={
             <ContinueButton
-              to={AnalysisStage.ROADMAPS}
-              label="Continue to roadmap"
-              hint="Next: milestones, team roles, and how to test it."
+              to={AnalysisStage.PLAN}
+              label="Continue to the plan"
+              hint="Next: phases, team, tools, and costs."
             />
           }
         >
           <SheetHeading>Still worth it?</SheetHeading>
           <p className="max-w-[60ch] text-[0.9375rem] leading-relaxed text-ink-soft">
-            If the risks above feel bigger than the strengths, edit the idea and mark it again before planning it.
+            If the risks above feel bigger than the strengths, go back to the snapshot, edit the idea, and mark it again before planning it.
           </p>
         </SheetRow>
       </Sheet>
     )
   }
 
-  // 🎨 STAGE 3: ROADMAP
-  const renderRoadmaps = () => {
-    if (!analysis || !stageData.stage3) return null
+  // 🎨 STAGE 3: PLAN (roadmap and tech plan on one sheet)
+  const renderPlan = () => {
+    if (!analysis || !stageData.stage3 || !stageData.stage4) return null
     const totalFte = stageData.stage3.teamRoles.reduce((sum, r) => sum + (Number(r.fteEstimate) || 0), 0)
 
     return (
       <Sheet>
         <SheetRow marginFirstOnMobile margin={<MarginNote mark={<Tick />} title={`${stageData.stage3.projectMilestones.length} phases`}>Each phase starts when the one before it is done.</MarginNote>}>
-          <h1 className="text-[1.5rem] font-semibold tracking-[-0.02em] text-ink sm:text-[1.75rem]">How to build it</h1>
+          <h1 className="text-[1.5rem] font-semibold tracking-[-0.02em] text-ink sm:text-[1.75rem]">The plan</h1>
+          <p className="mt-2 max-w-[60ch] text-[0.9375rem] text-ink-soft">How to build it, who you need, and what to build it with.</p>
         </SheetRow>
 
         {stageData.stage3.projectMilestones.map((milestone, index) => (
@@ -1462,35 +1527,6 @@ export default function AnalysisPage() {
         </SheetRow>
 
         <SheetRow
-          marginLabel="Next"
-          margin={
-            <ContinueButton
-              to={AnalysisStage.TECH_ROADMAP}
-              label="Continue to tech plan"
-              hint="Next: technology layers, versions, security, and costs."
-            />
-          }
-        >
-          <SheetHeading>Ready for the technical detail?</SheetHeading>
-          <p className="max-w-[60ch] text-[0.9375rem] leading-relaxed text-ink-soft">
-            The tech plan picks the tools for each layer and estimates what the build costs.
-          </p>
-        </SheetRow>
-      </Sheet>
-    )
-  }
-
-  // 🎨 STAGE 4: TECH PLAN
-  const renderTechRoadmap = () => {
-    if (!analysis || !stageData.stage4) return null
-
-    return (
-      <Sheet>
-        <SheetRow marginFirstOnMobile margin={<MarginNote mark={<Query />} title="Readiness, 1 to 9">9 means proven in production; below 7 means you are partly doing research.</MarginNote>}>
-          <h1 className="text-[1.5rem] font-semibold tracking-[-0.02em] text-ink sm:text-[1.75rem]">What to build it with</h1>
-        </SheetRow>
-
-        <SheetRow
           margin={(() => {
             const unproven = stageData.stage4.techRoadmap.filter((t) => t.trl < 7).length
             return unproven > 0 ? (
@@ -1500,7 +1536,7 @@ export default function AnalysisPage() {
             )
           })()}
         >
-          <SheetHeading>Technology layers</SheetHeading>
+          <SheetHeading aside="Readiness 1–9: 9 is proven in production">Technology layers</SheetHeading>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[34rem] border-collapse text-left text-[0.9375rem]">
               <thead>
@@ -1629,7 +1665,7 @@ export default function AnalysisPage() {
           marginLabel="Next"
           margin={
             <ContinueButton
-              to={AnalysisStage.DEEP_RESOURCES}
+              to={AnalysisStage.HAND_OFF}
               label="Continue to hand-off"
               hint="Next: export the report and find help."
             />
@@ -1644,13 +1680,13 @@ export default function AnalysisPage() {
     )
   }
 
-  // 🎨 STAGE 5: HAND-OFF
+  // 🎨 STAGE 4: HAND-OFF
   const renderDeepResources = () => {
     if (!analysis || !stageData.stage5) return null
 
     return (
       <Sheet>
-        <SheetRow marginFirstOnMobile margin={<MarginNote mark={<Tick />} title="All five pages marked">Export the report to show your supervisor or team.</MarginNote>}>
+        <SheetRow marginFirstOnMobile margin={<MarginNote mark={<Tick />} title="All four pages marked">Export the report to show your supervisor or team.</MarginNote>}>
           <h1 className="text-[1.5rem] font-semibold tracking-[-0.02em] text-ink sm:text-[1.75rem]">Take it further</h1>
         </SheetRow>
 
@@ -1734,77 +1770,6 @@ export default function AnalysisPage() {
       alert("Failed to export PDF. Please try again.")
     } finally {
       setExportLoading(false)
-    }
-  }
-
-  const generateRefinementSuggestions = async () => {
-    if (!analysis) return
-
-    setRefinementLoading(true)
-    try {
-      const response = await fetch("/api/refine", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          currentAnalysis: analysis,
-          projectTitle: analysis.projectTitle,
-          projectDescription: analysis.projectDescription,
-        }),
-      })
-
-      if (response.ok) {
-        const suggestions = await response.json()
-        setRefinementSuggestions(suggestions.suggestions || [])
-      } else {
-        const errorData = await response.json().catch(() => ({}))
-        alert(errorData.error || "Failed to generate refinement suggestions. Please try again.")
-      }
-    } catch (error) {
-      console.error("Failed to generate refinement suggestions:", error)
-      alert("Network error. Please check your connection and try again.")
-    } finally {
-      setRefinementLoading(false)
-    }
-  }
-
-  const reAnalyzeProject = async () => {
-    setRefinementLoading(true)
-    try {
-      const response = await fetch("/api/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          idea: `${projectModifications.title}: ${projectModifications.description}`,
-          stage: 'stage1'
-        }),
-      })
-
-      if (response.ok) {
-        const rawNewAnalysis = await response.json()
-        // 🔧 Apply validation to re-analyzed data
-        const validatedNewAnalysis = validateAnalysisData(rawNewAnalysis)
-
-        const updatedAnalysis = {
-          ...validatedNewAnalysis,
-          projectTitle: projectModifications.title,
-          projectDescription: projectModifications.description,
-        }
-
-        setAnalysis(updatedAnalysis)
-        localStorage.setItem("projectAnalysis", JSON.stringify(updatedAnalysis))
-        setStageData({})
-        setCurrentStage(AnalysisStage.QUICK_SNAPSHOT)
-        setShowRefinementTools(false)
-        fetchGitHubRepos(projectModifications.title)
-      } else {
-        const errorData = await response.json().catch(() => ({}))
-        alert(errorData.error || "Re-analysis failed. Please try again.")
-      }
-    } catch (error) {
-      console.error("Re-analysis failed:", error)
-      alert("Network error. Please check your connection and try again.")
-    } finally {
-      setRefinementLoading(false)
     }
   }
 
@@ -1935,9 +1900,10 @@ export default function AnalysisPage() {
 
   // Function to go back to input stage
   const goBackToInput = () => {
+    setClarifyQuestions(null)
+    setClarifications(null)
     setCurrentStage(AnalysisStage.INPUT)
     setAnalysis(null)
-    setProjectModifications({ title: "", description: "" })
   }
 
   // 🔥 STAGE DATA GENERATORS
@@ -1975,73 +1941,6 @@ export default function AnalysisPage() {
         timeEstimate: "1 day"
       }
     ]
-  }
-
-  const fetchExpertArticles = async (): Promise<ExpertArticle[]> => {
-    try {
-      const response = await fetch('/api/research-papers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idea: formData.idea || analysis?.projectTitle || '' })
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        return data.articles || []
-      }
-    } catch (error) {
-      console.error('Failed to fetch research papers:', error)
-    }
-
-    // Fallback data if API fails
-    const ideaLower = (formData.idea || analysis?.projectTitle || '').toLowerCase()
-    
-    if (ideaLower.includes('ai') || ideaLower.includes('machine learning')) {
-      return [
-        {
-          title: "Deep Learning for Software Engineering: A Systematic Literature Review",
-          url: "https://arxiv.org/abs/2103.09750",
-          source: "arXiv (2023)",
-          summary: "Comprehensive analysis of deep learning applications in software development, covering code generation, testing, and maintenance."
-        },
-        {
-          title: "Machine Learning Engineering in Production Systems",
-          url: "https://proceedings.mlr.press/v139/sculley21a.html",
-          source: "ICML (2023)",
-          summary: "Research on ML system design patterns, deployment strategies, and operational challenges in production environments."
-        }
-      ]
-    } else if (ideaLower.includes('web') || ideaLower.includes('app')) {
-      return [
-        {
-          title: "Modern Web Development: Performance and User Experience",
-          url: "https://dl.acm.org/doi/10.1145/3442381.3449851",
-          source: "ACM WWW (2023)",
-          summary: "Study of contemporary web technologies, performance optimization techniques, and user experience design principles."
-        },
-        {
-          title: "Mobile Application Development: Trends and Challenges",
-          url: "https://ieeexplore.ieee.org/document/9458920",
-          source: "IEEE Software (2023)",
-          summary: "Analysis of mobile development frameworks, cross-platform strategies, and emerging technology adoption patterns."
-        }
-      ]
-    } else {
-      return [
-        {
-          title: "Software Engineering Best Practices: A Meta-Analysis",
-          url: "https://link.springer.com/article/10.1007/s10664-023-10123-1",
-          source: "Empirical Software Engineering (2023)",
-          summary: "Comprehensive review of software development methodologies, quality assurance practices, and project success factors."
-        },
-        {
-          title: "Innovation in Digital Product Development",
-          url: "https://www.sciencedirect.com/science/article/pii/S0164121223000123",
-          source: "Journal of Systems and Software (2023)",
-          summary: "Research on innovation patterns, market validation strategies, and technology adoption in digital product development."
-        }
-      ]
-    }
   }
 
   const fetchExistingSolutions = async (): Promise<ExistingSolution[]> => {
@@ -2350,21 +2249,19 @@ export default function AnalysisPage() {
   const stageLabels: Record<number, string> = {
     1: "Snapshot",
     2: "Summary",
-    3: "Roadmap",
-    4: "Tech plan",
-    5: "Hand-off",
+    3: "Plan",
+    4: "Hand-off",
   }
 
   const stageHasData = (n: number) => {
     if (n === AnalysisStage.QUICK_SNAPSHOT) return !!analysis
     if (n === AnalysisStage.EXECUTIVE_SUMMARY) return !!stageData.stage2
-    if (n === AnalysisStage.ROADMAPS) return !!stageData.stage3
-    if (n === AnalysisStage.TECH_ROADMAP) return !!stageData.stage4
-    if (n === AnalysisStage.DEEP_RESOURCES) return !!stageData.stage5
+    if (n === AnalysisStage.PLAN) return !!stageData.stage3 && !!stageData.stage4
+    if (n === AnalysisStage.HAND_OFF) return !!stageData.stage5
     return false
   }
 
-  const stageTabs: StageTab[] = [1, 2, 3, 4, 5].map((n) => ({
+  const stageTabs: StageTab[] = [1, 2, 3, 4].map((n) => ({
     id: n,
     label: stageLabels[n],
     state:
@@ -2389,8 +2286,7 @@ export default function AnalysisPage() {
   const regenerateCurrent: Partial<Record<AnalysisStage, () => void>> = {
     [AnalysisStage.QUICK_SNAPSHOT]: regenerateStage1,
     [AnalysisStage.EXECUTIVE_SUMMARY]: regenerateStage2,
-    [AnalysisStage.ROADMAPS]: regenerateStage3,
-    [AnalysisStage.TECH_ROADMAP]: regenerateStage4,
+    [AnalysisStage.PLAN]: regeneratePlan,
   }
   const regenerate = regenerateCurrent[currentStage]
 
@@ -2417,137 +2313,71 @@ export default function AnalysisPage() {
     </Sheet>
   )
 
-  return (
-    <SelectionTooltip>
-      <div className="min-h-screen bg-background">
-        <AppBar
-          wide
-          actions={
-            <>
-              {analysis ? (
-                <>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowRefinementTools(!showRefinementTools)}
-                    aria-expanded={showRefinementTools}
-                    className="hidden sm:inline-flex"
-                  >
-                    <PenLine /> Refine idea
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={exportToPDF} disabled={exportLoading} className="hidden sm:inline-flex">
-                    {exportLoading ? <Loader2 className="animate-spin" /> : <Download />}
-                    Export
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={openAssistant}>
-                    <MessageCircle /> Ask
-                  </Button>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="size-8 sm:hidden" aria-label="More actions">
-                        <MoreHorizontal />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="min-w-[11rem] rounded-md border-rule bg-sheet shadow-lift">
-                      <DropdownMenuItem onSelect={() => setShowRefinementTools(true)}>
-                        <PenLine /> Refine idea
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onSelect={() => exportToPDF()} disabled={exportLoading}>
-                        <Download /> Export report
-                      </DropdownMenuItem>
-                      {currentStage !== AnalysisStage.INPUT ? (
-                        <>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem onSelect={goBackToInput}>
-                            <Edit3 /> Edit idea
-                          </DropdownMenuItem>
-                          {regenerate ? (
-                            <DropdownMenuItem onSelect={() => regenerate()} disabled={loading}>
-                              <RefreshCw /> Mark again
-                            </DropdownMenuItem>
-                          ) : null}
-                        </>
-                      ) : null}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </>
-              ) : null}
-              <ThemeToggle />
-            </>
-          }
-        />
+  // The idea can only be edited while it is on the first page; later pages build on it.
+  const canEditIdea = currentStage === AnalysisStage.QUICK_SNAPSHOT
 
-        {analysis && currentStage !== AnalysisStage.INPUT ? (
-          <div className="sticky top-14 z-30 border-b border-rule bg-background">
-            <div className="mx-auto flex max-w-[88rem] items-center gap-3 px-4 sm:px-6">
-              <StageTabs stages={stageTabs} onSelect={selectStage} className="min-w-0 flex-1" />
-              <div className="hidden shrink-0 items-center gap-0.5 sm:flex md:gap-1">
+  return (
+    <div className="min-h-screen bg-background">
+      <AppBar
+        wide
+        actions={
+          <>
+            {analysis ? (
+              <>
+                {canEditIdea || regenerate ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="size-8 sm:hidden" aria-label="More actions">
+                      <MoreHorizontal />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="min-w-[11rem] rounded-md border-rule bg-sheet shadow-lift">
+                    {canEditIdea ? (
+                      <DropdownMenuItem onSelect={goBackToInput}>
+                        <Edit3 /> Edit idea
+                      </DropdownMenuItem>
+                    ) : null}
+                    {regenerate ? (
+                      <DropdownMenuItem onSelect={() => regenerate()} disabled={loading}>
+                        <RefreshCw /> Mark again
+                      </DropdownMenuItem>
+                    ) : null}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                ) : null}
+              </>
+            ) : null}
+            <ThemeToggle />
+          </>
+        }
+      />
+
+      {analysis && currentStage !== AnalysisStage.INPUT ? (
+        <div className="sticky top-14 z-30 border-b border-rule bg-background">
+          <div className="mx-auto flex max-w-[88rem] items-center gap-3 px-4 sm:px-6">
+            <StageTabs stages={stageTabs} onSelect={selectStage} className="min-w-0 flex-1" />
+            <div className="hidden shrink-0 items-center gap-0.5 sm:flex md:gap-1">
+              {canEditIdea ? (
                 <Button variant="ghost" size="sm" onClick={goBackToInput} aria-label="Edit idea">
                   <Edit3 /> <span className="hidden md:inline">Edit idea</span>
                 </Button>
-                {regenerate ? (
-                  <Button variant="ghost" size="sm" onClick={regenerate} disabled={loading} aria-label="Mark again">
-                    {loading ? <Loader2 className="animate-spin" /> : <RefreshCw />}
-                    <span className="hidden md:inline">Mark again</span>
-                  </Button>
-                ) : null}
-              </div>
+              ) : null}
+              {regenerate ? (
+                <Button variant="ghost" size="sm" onClick={regenerate} disabled={loading} aria-label="Mark again">
+                  {loading ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+                  <span className="hidden md:inline">Mark again</span>
+                </Button>
+              ) : null}
             </div>
           </div>
-        ) : null}
+        </div>
+      ) : null}
 
-        <main className="mx-auto max-w-[88rem] px-4 py-6 sm:px-6 sm:py-10">
-          {showRefinementTools && analysis ? (
-            <Sheet className="mb-6">
-              <SheetRow
-                divider={false}
-                margin={
-                  <div className="space-y-2">
-                    <Button
-                      onClick={reAnalyzeProject}
-                      disabled={refinementLoading || !projectModifications.description.trim()}
-                      className="w-full justify-between"
-                    >
-                      {refinementLoading ? "Marking again…" : "Mark the new version"}
-                      {refinementLoading ? <Loader2 className="animate-spin" /> : <RefreshCw />}
-                    </Button>
-                    <Button variant="ghost" className="w-full" onClick={() => setShowRefinementTools(false)} disabled={refinementLoading}>
-                      Cancel
-                    </Button>
-                  </div>
-                }
-              >
-                <SheetHeading>Refine your idea</SheetHeading>
-                <div className="space-y-4">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="refine-title" className="text-meta font-medium text-ink-soft">Title</Label>
-                    <Input
-                      id="refine-title"
-                      value={projectModifications.title}
-                      onChange={(e) => setProjectModifications(prev => ({ ...prev, title: e.target.value }))}
-                      placeholder="Project title"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="refine-description" className="text-meta font-medium text-ink-soft">Description</Label>
-                    <Textarea
-                      id="refine-description"
-                      value={projectModifications.description}
-                      onChange={(e) => setProjectModifications(prev => ({ ...prev, description: e.target.value }))}
-                      placeholder="Describe the changed idea"
-                      className="min-h-28"
-                    />
-                  </div>
-                </div>
-              </SheetRow>
-            </Sheet>
-          ) : null}
-
-          <div key={`${currentStage}-${analyzing}`} className="animate-ink-in">
-            {analyzing ? renderMarking() : (renderStageContent() ?? renderMissingStage())}
-          </div>
-        </main>
-      </div>
-    </SelectionTooltip>
+      <main className="mx-auto max-w-[88rem] px-4 py-6 sm:px-6 sm:py-10">
+        <div key={`${currentStage}-${analyzing}`} className="animate-ink-in">
+          {analyzing ? renderMarking() : (renderStageContent() ?? renderMissingStage())}
+        </div>
+      </main>
+    </div>
   )
 }

@@ -1,7 +1,6 @@
 import { generateText } from "ai"
 import { createGroq } from "@ai-sdk/groq"
 import { type NextRequest, NextResponse } from "next/server"
-import { fetchResearchPapers } from "@/lib/research-papers"
 
 const groq = createGroq({
   apiKey: process.env.GROQ_API_KEY,
@@ -15,16 +14,15 @@ export async function POST(request: NextRequest) {
   try {
 
     switch (stage) {
-      case 2: // Executive Summary
+      case 2: // Summary
         responseData = await generateStage2Data(analysis, idea)
         break
-      case 3: // Roadmaps
-        responseData = await generateStage3Data(analysis)
+      case 3: { // Plan: roadmap and tech plan, generated together
+        const [roadmap, tech] = await Promise.all([generateStage3Data(analysis), generateStage4Data(analysis)])
+        responseData = { ...roadmap, ...tech }
         break
-      case 4: // Tech Roadmap
-        responseData = await generateStage4Data(analysis)
-        break
-      case 5: // Deep Resources
+      }
+      case 4: // Hand-off
         responseData = await generateStage5Data(analysis)
         break
       default:
@@ -53,9 +51,6 @@ async function generateStage2Data(analysis: any, idea: string) {
     }
   ]
 
-  // Fetch real expert articles from research papers APIs
-  const expertArticles = await fetchResearchPapers(idea)
-
   // Mock existing solutions
   const existingSolutions = [
     {
@@ -74,7 +69,6 @@ async function generateStage2Data(analysis: any, idea: string) {
 
   return {
     quickWins,
-    expertArticles,
     existingSolutions,
     githubRepos: [] // Will be populated by separate GitHub API call
   }

@@ -18,12 +18,12 @@ const faqs = [
     a: "Treat it as a second opinion from a strict examiner, not a guarantee. It is an AI's judgement, so check the risks it raises with real users and your supervisor.",
   },
   {
-    q: "Where do the research papers and similar projects come from?",
-    a: "Papers come from Semantic Scholar and OpenAlex, and similar projects from GitHub search. Each one links to its source so you can read it yourself.",
+    q: "Where do the similar projects come from?",
+    a: "From a GitHub search for your idea. Each one links to its repository so you can read it yourself.",
   },
   {
     q: "Can I change my idea after it is marked?",
-    a: "Yes. Edit it or refine the description and mark it again as many times as you like.",
+    a: "Yes, while it is on the snapshot page: edit it and mark it again as many times as you like. Once you move on, the later pages build on that version.",
   },
 ]
 

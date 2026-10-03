@@ -9,23 +9,20 @@ import { ExampleEvaluation } from "@/components/ExampleEvaluation"
 import { Audiences } from "@/components/Audiences"
 import { FAQ } from "@/components/FAQ"
 import { Footer } from "@/components/Footer"
-import { SelectionTooltip } from "@/components/SelectionTooltip"
 
 export default function Home() {
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
-      <SelectionTooltip>
-        <main>
-          <Hero />
-          <ExampleEvaluation />
-          <HowItWorks />
-          <Audiences />
-          <Features />
-          <FAQ />
-          <CTA />
-        </main>
-      </SelectionTooltip>
+      <main>
+        <Hero />
+        <ExampleEvaluation />
+        <HowItWorks />
+        <Audiences />
+        <Features />
+        <FAQ />
+        <CTA />
+      </main>
       <Footer />
     </div>
   )
