@@ -1,77 +1,96 @@
 "use client"
 
-import Link from "next/link"
+import * as React from "react"
+import { useRouter } from "next/navigation"
+import { ArrowRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { ArrowRight, Brain, Zap } from "lucide-react"
-import { SelectionTooltip } from "@/components/SelectionTooltip"
+import { Textarea } from "@/components/ui/textarea"
+import { Label } from "@/components/ui/label"
+import { Sheet, SheetRow } from "@/components/script/sheet"
+import { Underline } from "@/components/script/marks"
+
+const pages = [
+  { n: 1, name: "Snapshot", asks: "Is it worth building?" },
+  { n: 2, name: "Summary", asks: "What works, and what could sink it?" },
+  { n: 3, name: "Roadmap", asks: "What are the phases, and who does what?" },
+  { n: 4, name: "Tech plan", asks: "Which tools, and what will it cost?" },
+  { n: 5, name: "Hand-off", asks: "How do I take this further?" },
+]
 
 export function Hero() {
+  const router = useRouter()
+  const [idea, setIdea] = React.useState("")
+  const ready = idea.trim().length >= 15
+
+  const start = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!idea.trim()) return
+    try {
+      sessionStorage.setItem("draftIdea", idea.trim())
+    } catch {
+      // Storage can be unavailable (private mode); the analysis page still opens blank.
+    }
+    router.push("/analysis")
+  }
+
   return (
-    <SelectionTooltip>
-      <section className="relative overflow-hidden bg-background">
-      {/* Background gradient */}
-      <div className="absolute inset-0 hero-gradient" />
-      
-      <div className="relative container mx-auto px-4 py-20 sm:py-24 lg:py-32">
-        <div className="text-center space-y-8">
-          {/* Badge */}
-          <div className="inline-flex items-center px-4 py-2 rounded-full border border-border bg-background/50 backdrop-blur-sm">
-            <Zap className="w-4 h-4 mr-2 text-yellow-400" />
-            <span className="text-sm font-medium">AI-Powered Project Analysis</span>
-          </div>
+    <section className="mx-auto max-w-6xl px-4 pb-16 pt-12 sm:px-6 sm:pt-20 lg:pb-24">
+      <h1 className="max-w-[16ch] text-[2.6rem] font-semibold leading-[1.02] tracking-[-0.04em] text-ink sm:text-[3.75rem] lg:text-[4.5rem]">
+        Is your project idea{" "}
+        <span className="relative inline-block whitespace-nowrap">
+          worth building?
+          <Underline className="absolute -bottom-2 left-0 h-3 w-full text-marker sm:-bottom-3 sm:h-4" />
+        </span>
+      </h1>
+      <p className="mt-8 max-w-[58ch] text-[1.0625rem] leading-relaxed text-ink-soft sm:text-lg">
+        Write it down and get it marked like an exam answer: a score out of ten, the real risks noted in the margin, and,
+        if it holds up, a plan you can start on today.
+      </p>
 
-          {/* Main heading */}
-          <div className="space-y-4">
-            <h1 className="text-4xl font-bold tracking-tight sm:text-6xl lg:text-7xl animate-fade-in-up">
-              Transform Your{" "}
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600">
-                Ideas
-              </span>{" "}
-              Into Reality
-            </h1>
-            <p className="text-xl text-muted-foreground max-w-3xl mx-auto animate-fade-in-up animate-delay-200">
-              Get brutally honest AI analysis of your project ideas. Discover feasibility, timeline, 
-              tech stack recommendations, and roadmaps to turn concepts into successful products.
-            </p>
-          </div>
-
-          {/* CTA buttons */}
-          <div className="flex flex-col sm:flex-row gap-4 justify-center animate-fade-in-up animate-delay-400">
-            <Button asChild size="lg" className="btn-gradient text-lg px-8 py-6">
-              <Link href="/analysis">
-                Analyze Your Idea
-                <ArrowRight className="ml-2 w-5 h-5" />
-              </Link>
-            </Button>
-            <Button variant="outline" size="lg" className="text-lg px-8 py-6 transition-all duration-300">
-              <Brain className="mr-2 w-5 h-5" />
-              See Example Analysis
-            </Button>
-          </div>
-
-          {/* Stats */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 pt-16 animate-fade-in-up animate-delay-400">
-            <div className="text-center">
-              <div className="text-3xl font-bold text-primary">95%</div>
-              <div className="text-sm text-muted-foreground">Analysis Accuracy</div>
+      <form onSubmit={start} className="mt-10 sm:mt-12">
+        <Sheet>
+          <SheetRow
+            divider={false}
+            marginLabel="What gets marked"
+            margin={
+              <div>
+                <p className="text-sm font-semibold text-marker">What gets marked</p>
+                <ol className="mt-3 space-y-3">
+                  {pages.map((p) => (
+                    <li key={p.n} className="flex gap-3">
+                      <span className="pt-0.5 font-mono text-meta text-pencil tabular">{p.n}</span>
+                      <div>
+                        <p className="text-sm font-semibold text-ink">{p.name}</p>
+                        <p className="text-meta text-ink-soft">{p.asks}</p>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+                <p className="mt-4 border-t border-rule pt-3 text-meta text-pencil">
+                  Each page opens only when you choose to go on, so a weak idea can stop at page one.
+                </p>
+              </div>
+            }
+          >
+            <Label htmlFor="idea" className="text-sm font-semibold text-ink">
+              Your idea
+            </Label>
+            <Textarea
+              id="idea"
+              value={idea}
+              onChange={(e) => setIdea(e.target.value)}
+              placeholder="e.g. A campus app that matches students into study groups by course and free periods, with a shared timetable and chat."
+              className="ruled mt-3 min-h-[12rem] resize-none rounded-none border-0 border-b border-rule bg-transparent px-0 py-1.5 text-[1.0625rem] leading-8 md:text-[1.0625rem] dark:bg-transparent text-ink shadow-none placeholder:text-pencil/80 focus-visible:border-marker focus-visible:ring-0"
+            />
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-4">
+              <p className="text-meta text-pencil">Say what it does, who it is for, and what you already know about building it.</p>
+              <Button type="submit" size="lg" disabled={!ready} className="h-11 px-5 text-[0.9375rem]">
+                Mark my idea <ArrowRight />
+              </Button>
             </div>
-            <div className="text-center">
-              <div className="text-3xl font-bold text-primary">10k+</div>
-              <div className="text-sm text-muted-foreground">Ideas Evaluated</div>
-            </div>
-            <div className="text-center">
-              <div className="text-3xl font-bold text-primary">30s</div>
-              <div className="text-sm text-muted-foreground">Average Analysis Time</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Decorative elements */}
-      <div className="absolute top-0 left-0 w-32 h-32 sm:w-48 sm:h-48 md:w-72 md:h-72 bg-purple-500/20 rounded-full mix-blend-multiply filter blur-xl animate-blob" />
-      <div className="absolute top-0 right-0 w-32 h-32 sm:w-48 sm:h-48 md:w-72 md:h-72 bg-pink-500/20 rounded-full mix-blend-multiply filter blur-xl animate-blob animation-delay-2000" />
-      <div className="absolute bottom-0 left-10 sm:left-20 w-32 h-32 sm:w-48 sm:h-48 md:w-72 md:h-72 bg-blue-500/20 rounded-full mix-blend-multiply filter blur-xl animate-blob animation-delay-4000" />
+          </SheetRow>
+        </Sheet>
+      </form>
     </section>
-    </SelectionTooltip>
   )
 }

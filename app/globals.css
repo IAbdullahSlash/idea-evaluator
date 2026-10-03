@@ -2,301 +2,246 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Custom animations for selection tooltip */
-@keyframes fade-in-0 {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes zoom-in-95 {
-  from { transform: scale(0.95); }
-  to { transform: scale(1); }
-}
-
-.animate-in {
-  animation-fill-mode: both;
-}
-
-.fade-in-0 {
-  animation: fade-in-0 150ms ease-out;
-}
-
-.zoom-in-95 {
-  animation: zoom-in-95 150ms ease-out;
-}
-
-.duration-200 {
-  animation-duration: 200ms;
-}
-
-/* Design system - all colors MUST be HSL */
-
+/*
+ * The Idea Evaluator: the marked-script world.
+ * Desk-grey ground, white script sheets, blue-black ink, and marker red reserved
+ * for the examiner's voice (margin rule, scores, marks, primary action).
+ * Flat colour throughout: no gradients, glows, or glass.
+ * Values are HSL channels so Tailwind opacity modifiers work.
+ */
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
+    --background: 220 9% 95%;        /* desk */
+    --foreground: 219 28% 15%;       /* blue-black ink */
+    --sheet: 0 0% 100%;              /* script paper */
+    --ink: 219 28% 15%;
+    --ink-soft: 221 14% 34%;
+    --pencil: 220 9% 44%;
+    --rule: 218 15% 89%;
+    --marker: 3 76% 48%;             /* examiner's red */
+    --marker-foreground: 0 0% 100%;
+    --highlight: 51 100% 68%;        /* highlighter */
 
-    --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
-
+    --card: var(--sheet);
+    --card-foreground: var(--ink);
     --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
+    --popover-foreground: var(--ink);
+    --primary: var(--marker);
+    --primary-foreground: var(--marker-foreground);
+    --secondary: 220 14% 93%;
+    --secondary-foreground: var(--ink);
+    --muted: 220 14% 96.5%;
+    --muted-foreground: var(--ink-soft);
+    --accent: 220 14% 94%;
+    --accent-foreground: var(--ink);
+    --destructive: 3 75% 36%;
+    --destructive-foreground: 0 0% 100%;
+    --border: var(--rule);
+    --input: 218 13% 82%;
+    --ring: var(--marker);
 
-    --primary: 263 70% 50%;
-    --primary-foreground: 0 0% 100%;
-
-    --secondary: 240 5% 96%;
-    --secondary-foreground: 240 10% 3.9%;
-
-    --muted: 240 5% 96%;
-    --muted-foreground: 240 5% 45%;
-
-    --accent: 193 100% 50%;
-    --accent-foreground: 0 0% 100%;
-
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-
-    --border: 240 6% 90%;
-    --input: 240 6% 90%;
-    --ring: 263 70% 50%;
-
-    --radius: 0.75rem;
-
-    /* Gradients */
-    --gradient-primary: linear-gradient(135deg, hsl(263 70% 50%), hsl(250 100% 60%));
-    --gradient-accent: linear-gradient(135deg, hsl(193 100% 50%), hsl(220 100% 60%));
-    --gradient-hero: linear-gradient(180deg, hsl(0 0% 100%), hsl(240 20% 98%));
-    
-    /* Glass morphism */
-    --glass-bg: hsla(0, 0%, 100%, 0.7);
-    --glass-border: hsla(240, 10%, 20%, 0.1);
-
-    /* Shadows */
-    --shadow-glow: 0 0 40px hsla(263, 70%, 50%, 0.2);
-    --shadow-card: 0 8px 32px hsla(240, 10%, 3.9%, 0.1);
-
-    /* Brand colors for social links */
-    --twitter: 224 192 46;
-    --linkedin: 10 102 194;
+    --radius: 0.25rem;
+    --margin-width: 18rem;
+    color-scheme: light;
   }
 
+  /* The same script under a desk lamp. */
   .dark {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
+    --background: 220 20% 8%;
+    --foreground: 220 15% 92%;
+    --sheet: 220 19% 12.5%;
+    --ink: 220 15% 92%;
+    --ink-soft: 220 10% 70%;
+    --pencil: 220 8% 58%;
+    --rule: 219 16% 21%;
+    --marker: 3 88% 61%;
+    --marker-foreground: 220 20% 8%;
+    --highlight: 51 100% 62%;
 
-    --card: 240 10% 8%;
-    --card-foreground: 0 0% 98%;
-
-    --popover: 240 10% 8%;
-    --popover-foreground: 0 0% 98%;
-
-    --primary: 263 70% 50%;
-    --primary-foreground: 0 0% 100%;
-
-    --secondary: 240 5% 26%;
-    --secondary-foreground: 0 0% 98%;
-
-    --muted: 240 5% 26%;
-    --muted-foreground: 240 5% 65%;
-
-    --accent: 193 100% 50%;
-    --accent-foreground: 240 10% 3.9%;
-
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-
-    --border: 240 10% 15%;
-    --input: 240 10% 15%;
-    --ring: 263 70% 50%;
-
-    /* Gradients */
-    --gradient-primary: linear-gradient(135deg, hsl(263 70% 50%), hsl(250 100% 60%));
-    --gradient-accent: linear-gradient(135deg, hsl(193 100% 50%), hsl(220 100% 60%));
-    --gradient-hero: linear-gradient(180deg, hsl(240 10% 3.9%), hsl(250 20% 10%));
-
-    /* Glass morphism */
-    --glass-bg: hsla(240, 10%, 10%, 0.6);
-    --glass-border: hsla(0, 0%, 100%, 0.1);
-
-    /* Shadows */
-    --shadow-glow: 0 0 40px hsla(263, 70%, 50%, 0.3);
-    --shadow-card: 0 8px 32px hsla(0, 0%, 0%, 0.4);
-
-    /* Brand colors for social links */
-    --twitter: 224 192 46;
-    --linkedin: 10 102 194;
-  }
-}
-
-@layer utilities {
-  .bg-gradient-primary {
-    background: var(--gradient-primary);
+    --popover: 220 19% 14%;
+    --secondary: 220 15% 18%;
+    --muted: 220 17% 15%;
+    --accent: 220 15% 19%;
+    --destructive: 3 70% 52%;
+    --input: 219 14% 28%;
+    color-scheme: dark;
   }
 
-  .bg-gradient-accent {
-    background: var(--gradient-accent);
-  }
-
-  .bg-gradient-hero {
-    background: var(--gradient-hero);
-  }
-
-  .glass-card {
-    background: var(--glass-bg);
-    border: 1px solid var(--glass-border);
-    backdrop-filter: blur(12px);
-  }
-
-  .text-gradient {
-    background: var(--gradient-primary);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-  }
-
-  .shadow-glow {
-    box-shadow: var(--shadow-glow);
-  }
-}
-
-@layer base {
   * {
     @apply border-border;
   }
 
-  body {
-    @apply bg-background text-foreground;
-  }
-
   html {
     scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: "ss01", "cv11";
+    text-rendering: optimizeLegibility;
+  }
+
+  h1, h2, h3, h4 {
+    text-wrap: balance;
+    letter-spacing: -0.015em;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  ::selection {
+    background: hsl(var(--highlight) / 0.75);
+    color: hsl(219 28% 15%);
+  }
+
+  :focus-visible {
+    outline: 2px solid hsl(var(--marker));
+    outline-offset: 2px;
+  }
+
+  input, textarea {
+    caret-color: hsl(var(--marker));
+  }
+
+  a {
+    text-underline-offset: 3px;
+    text-decoration-thickness: 1px;
+  }
+
+  /* Scrollbars in the sheet's own greys */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--input)) transparent;
+  }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--input));
+    border: 3px solid hsl(var(--background));
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: hsl(var(--pencil)); }
+}
+
+@layer components {
+  /* A white script sheet sitting on the desk. */
+  .sheet {
+    @apply bg-sheet text-ink rounded-lg border border-rule;
+    box-shadow: 0 1px 0 hsl(var(--rule));
+  }
+
+  /*
+   * The examiner's margin: the signature move.
+   * A double red rule (two 1px lines) separates the answer from the marks.
+   */
+  .margin-rule {
+    position: relative;
+  }
+  .margin-rule::before,
+  .margin-rule::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: hsl(var(--marker) / 0.85);
+    pointer-events: none;
+  }
+  .margin-rule::before { left: 0; }
+  .margin-rule::after { left: 4px; }
+
+  /* Horizontal version for narrow screens, where the margin stacks on top. */
+  .margin-rule-top {
+    position: relative;
+  }
+  .margin-rule-top::before,
+  .margin-rule-top::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: hsl(var(--marker) / 0.85);
+    pointer-events: none;
+  }
+  .margin-rule-top::before { top: 0; }
+  .margin-rule-top::after { top: 4px; }
+
+  /* Highlighter stroke behind a phrase the margin refers to. */
+  .hl {
+    background-image: linear-gradient(
+      100deg,
+      hsl(var(--highlight) / 0) 0.2em,
+      hsl(var(--highlight) / 0.7) 0.4em,
+      hsl(var(--highlight) / 0.55) 96%,
+      hsl(var(--highlight) / 0) 100%
+    );
+    background-size: 100% 72%;
+    background-position: 0 70%;
+    background-repeat: no-repeat;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+    padding: 0 0.15em;
+  }
+  .dark .hl {
+    background-image: linear-gradient(
+      100deg,
+      hsl(var(--highlight) / 0) 0.2em,
+      hsl(var(--highlight) / 0.28) 0.4em,
+      hsl(var(--highlight) / 0.2) 96%,
+      hsl(var(--highlight) / 0) 100%
+    );
+  }
+
+  /* Faint ruled lines, used for blank answer space and loading states. */
+  .ruled {
+    background-image: repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent calc(2rem - 1px),
+      hsl(var(--rule)) calc(2rem - 1px),
+      hsl(var(--rule)) 2rem
+    );
+    background-position: 0 0.4rem;
+  }
+
+  .label-caps {
+    @apply text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-pencil;
+  }
+
+  .tabular {
+    font-variant-numeric: tabular-nums;
   }
 }
 
-/* ===== Custom Animations ===== */
-@keyframes fade-in-up {
-  from {
-    opacity: 0;
-    transform: translateY(30px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+@layer utilities {
+  .line-clamp-2 {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
   }
 }
 
-@keyframes blob {
-  0% {
-    transform: translate(0px, 0px) scale(1);
-  }
-  33% {
-    transform: translate(30px, -50px) scale(1.1);
-  }
-  66% {
-    transform: translate(-20px, 20px) scale(0.9);
-  }
-  100% {
-    transform: translate(0px, 0px) scale(1);
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
-.animate-fade-in-up {
-  animation: fade-in-up 0.6s ease-out;
-}
-
-.animate-blob {
-  animation: blob 7s infinite;
-}
-
-.animate-delay-200 {
-  animation-delay: 200ms;
-}
-
-.animate-delay-400 {
-  animation-delay: 400ms;
-}
-
-.animation-delay-2000 {
-  animation-delay: 2s;
-}
-
-.animation-delay-4000 {
-  animation-delay: 4s;
-}
-
-/* ===== Button & Card Effects ===== */
-.btn-gradient {
-  background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--accent)) 100%);
-  transition: all 0.3s ease;
-}
-
-.btn-gradient:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 25px hsla(263, 70%, 50%, 0.3);
-}
-
-.card-hover {
-  transition: all 0.3s ease;
-}
-
-.card-hover:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 20px 40px hsla(var(--background), 0.15);
-}
-
-/* ===== CTA Gradient ===== */
-.cta-gradient {
-  background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--accent)) 50%, hsl(var(--ring)) 100%);
-}
-
-/* ===== Hero Gradient ===== */
-.hero-gradient {
-  background: linear-gradient(135deg,
-    rgba(147, 51, 234, 0.1) 0%,
-    rgba(79, 70, 229, 0.1) 25%,
-    rgba(236, 72, 153, 0.1) 50%,
-    rgba(245, 101, 101, 0.1) 75%,
-    rgba(251, 146, 60, 0.1) 100%
-  );
-}
-
-/* ===== Glow Effects ===== */
-.glow {
-  box-shadow: 0 0 20px hsla(263, 70%, 50%, 0.3);
-}
-
-.text-glow {
-  text-shadow: 0 0 20px hsla(263, 70%, 50%, 0.5);
-}
-
-/* ===== Progress Bar Animation ===== */
-.progress-animate {
-  transition: width 0.5s ease-in-out;
-}
-
-/* ===== Custom Scrollbar ===== */
-::-webkit-scrollbar {
-  width: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: hsl(var(--muted));
-}
-
-::-webkit-scrollbar-thumb {
-  background: hsl(var(--accent));
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--primary));
-}
-
-/* ===== Line Clamp ===== */
-.line-clamp-2 {
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
+/* Code blocks inside assistant answers (replaces the highlight.js theme). */
+.hljs { color: hsl(var(--ink)); background: transparent; }
+.hljs-keyword, .hljs-selector-tag, .hljs-built_in { color: hsl(var(--marker)); }
+.hljs-string, .hljs-attr { color: hsl(152 45% 32%); }
+.dark .hljs-string, .dark .hljs-attr { color: hsl(152 45% 62%); }
+.hljs-comment { color: hsl(var(--pencil)); font-style: italic; }
+.hljs-number, .hljs-literal { color: hsl(221 60% 45%); }
+.dark .hljs-number, .dark .hljs-literal { color: hsl(221 80% 72%); }
+.hljs-title, .hljs-function { color: hsl(var(--ink)); font-weight: 600; }

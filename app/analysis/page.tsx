@@ -1,11 +1,8 @@
 "use client"
 
+import * as React from "react"
 import { useEffect, useState } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Progress } from "@/components/ui/progress"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -13,43 +10,36 @@ import { SelectionTooltip } from "@/components/SelectionTooltip"
 import { useAIAssistant } from "@/contexts/AIAssistantContext"
 import { validateIdea } from "@/lib/validation"
 import { fetchWithFallback } from "@/lib/fetch-with-fallback"
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
+import { cn } from "@/lib/utils"
 import {
-  Brain,
-  CheckCircle,
-  AlertTriangle,
-  Lightbulb,
-  Code,
-  Calendar,
-  Download,
-  Loader2,
-  RefreshCw,
-  Zap,
-  Edit3,
-  TrendingUp,
   ArrowRight,
-  MessageCircle,
-  Play,
-  Unlock,
-  Shield,
-  Clock,
-  Users,
-  Target,
-  FileText,
-  ExternalLink,
-  Star,
-  GitBranch,
+  ArrowUpRight,
   BarChart3,
-  MapPin,
-  DollarSign,
+  ChevronDown,
+  MoreHorizontal,
+  Download,
+  Edit3,
+  PenLine,
+  FileText,
   Link as LinkIcon,
-  Briefcase,
-  BookOpen,
+  Loader2,
+  MessageCircle,
+  RefreshCw,
+  Star,
 } from "lucide-react"
-import Link from "next/link"
 import { ThemeToggle } from "@/components/ThemeToggle"
-import { AIAssistantChat } from "@/components/AIAssistantChat"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { AppBar } from "@/components/script/app-bar"
+import { Chip, Fact, MarginNote, Sheet, SheetHeading, SheetRow } from "@/components/script/sheet"
+import { CircledScore, Cross, Query, Tick } from "@/components/script/marks"
+import { Markdown } from "@/components/script/markdown"
+import { StageTabs, type StageTab } from "@/components/script/stage-tabs"
 
 // 🚀 STAGE DEFINITIONS
 enum AnalysisStage {
@@ -61,21 +51,6 @@ enum AnalysisStage {
   DEEP_RESOURCES = 5
 }
 
-// ✨ Shimmer loader for "Analyzing..." state
-function ShimmerLoader() {
-  return (
-    <div className="space-y-6 animate-pulse">
-      <div className="h-8 bg-muted rounded w-1/3 mx-auto" />
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="h-32 bg-muted rounded" />
-        <div className="h-32 bg-muted rounded" />
-      </div>
-      <div className="h-6 bg-muted rounded w-2/3 mx-auto" />
-      <div className="h-6 bg-muted rounded w-1/2 mx-auto" />
-      <div className="h-32 bg-muted rounded" />
-    </div>
-  )
-}
 
 
 interface AnalysisData {
@@ -211,68 +186,6 @@ interface TaskProgress {
   [key: string]: boolean
 }
 
-// Typing Effect Component for Reality Check
-interface TypingTextProps {
-  text: string
-  speed?: number
-  className?: string
-}
-
-function TypingText({ text, speed = 30, className = "" }: TypingTextProps) {
-  const [displayedText, setDisplayedText] = useState("")
-  const [isComplete, setIsComplete] = useState(false)
-
-  useEffect(() => {
-    setDisplayedText("")
-    setIsComplete(false)
-    
-    let index = 0
-    const timer = setInterval(() => {
-      if (index < text.length) {
-        setDisplayedText(text.slice(0, index + 1))
-        index++
-      } else {
-        setIsComplete(true)
-        clearInterval(timer)
-      }
-    }, speed)
-
-    return () => clearInterval(timer)
-  }, [text, speed])
-
-  return (
-    <div className={className}>
-      <ReactMarkdown 
-        remarkPlugins={[remarkGfm]}
-        components={{
-          h2: ({ children }) => (
-            <h2 className="text-lg font-bold mb-3 mt-4 first:mt-0">{children}</h2>
-          ),
-          h3: ({ children }) => (
-            <h3 className="text-base font-semibold mb-2 mt-3">{children}</h3>
-          ),
-          p: ({ children }) => (
-            <p className="mb-3 leading-relaxed">{children}</p>
-          ),
-          ul: ({ children }) => (
-            <ul className="mb-3 space-y-1">{children}</ul>
-          ),
-          li: ({ children }) => (
-            <li className="flex items-start gap-2">
-              <span className="text-current mt-2 w-1 h-1 rounded-full bg-current flex-shrink-0"></span>
-              <span>{children}</span>
-            </li>
-          ),
-          strong: ({ children }) => (
-            <strong className="font-semibold">{children}</strong>
-          ),
-        }}
-      >
-        {displayedText}
-      </ReactMarkdown>
-    </div>
-  )
-}
 
 export default function AnalysisPage() {
   // 🚀 STAGED ANALYSIS STATE
@@ -349,6 +262,13 @@ export default function AnalysisPage() {
       const savedProgress = localStorage.getItem("taskProgress")
       if (savedProgress) {
         setTaskProgress(JSON.parse(savedProgress))
+      }
+      // An idea started on the landing page opens on the blank script, pre-filled.
+      const draftIdea = sessionStorage.getItem("draftIdea")
+      if (draftIdea) {
+        setFormData(prev => ({ ...prev, idea: draftIdea }))
+        setCurrentStage(AnalysisStage.INPUT)
+        sessionStorage.removeItem("draftIdea")
       }
     } catch (e) {
       console.warn("Failed to restore from localStorage:", e)
@@ -799,954 +719,986 @@ export default function AnalysisPage() {
     }
   }
 
-  const renderInputStage = () => (
-    <Card className="shadow-2xl">
-      <CardHeader className="text-center pb-4">
-        <CardTitle className="text-2xl">Analyze Your Project Idea</CardTitle>
-        <CardDescription>
-          Tell us about your project — structured context helps the AI give sharper analysis
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <form onSubmit={handleAnalyzeIdea} className="space-y-4">
-          {/* Structured intake fields */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <Label htmlFor="domain">Domain</Label>
-              <select
-                id="domain"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                value={formData.domain}
-                onChange={(e) => setFormData(prev => ({ ...prev, domain: e.target.value }))}
-              >
-                <option value="">Select domain...</option>
-                <option value="AI/ML">AI / Machine Learning</option>
-                <option value="FinTech">FinTech</option>
-                <option value="EdTech">EdTech</option>
-                <option value="HealthTech">HealthTech</option>
-                <option value="E-commerce">E-commerce</option>
-                <option value="SaaS">SaaS</option>
-                <option value="Social">Social</option>
-                <option value="Gaming">Gaming</option>
-                <option value="Productivity">Productivity</option>
-                <option value="IoT">IoT</option>
-                <option value="Other">Other</option>
-              </select>
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="projectType">Project Type</Label>
-              <select
-                id="projectType"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                value={formData.projectType}
-                onChange={(e) => setFormData(prev => ({ ...prev, projectType: e.target.value }))}
-              >
-                <option value="">Select type...</option>
-                <option value="MVP">MVP</option>
-                <option value="Full Product">Full Product</option>
-                <option value="Prototype">Prototype</option>
-                <option value="API/Service">API / Service</option>
-                <option value="Mobile App">Mobile App</option>
-                <option value="Web App">Web App</option>
-              </select>
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="experience">Your Experience Level</Label>
-              <select
-                id="experience"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                value={formData.experience}
-                onChange={(e) => setFormData(prev => ({ ...prev, experience: e.target.value }))}
-              >
-                <option value="">Select level...</option>
-                <option value="Beginner">Beginner</option>
-                <option value="Intermediate">Intermediate</option>
-                <option value="Advanced">Advanced</option>
-              </select>
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="timeline">Expected Timeline</Label>
-              <select
-                id="timeline"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                value={formData.timeline}
-                onChange={(e) => setFormData(prev => ({ ...prev, timeline: e.target.value }))}
-              >
-                <option value="">Select timeline...</option>
-                <option value="1-2 weeks">1-2 weeks</option>
-                <option value="1-2 months">1-2 months</option>
-                <option value="3-6 months">3-6 months</option>
-                <option value="6+ months">6+ months</option>
-              </select>
-            </div>
-          </div>
+  // 🎨 SHARED PIECES FOR THE MARKED SCRIPT
 
-          {/* Idea textarea */}
-          <div className="space-y-2">
-            <Label htmlFor="project-idea">Project Idea</Label>
+  const selectClass =
+    "h-10 w-full appearance-none rounded-md border border-input bg-sheet pl-3 pr-9 text-sm text-ink transition-colors hover:border-pencil focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-marker/40 focus-visible:border-marker"
+
+  const SelectChevron = () => (
+    <ChevronDown aria-hidden className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-pencil" />
+  )
+
+  const scoreMark = (score: number) =>
+    score >= 8 ? <Tick title="Strong" /> : score >= 6 ? <Query title="Workable, with conditions" /> : <Cross title="Weak" />
+
+  // Placeholder copy the API fills in when a field is missing: never counted as a judgment.
+  const isPlaceholder = (t?: string) => !t || /assessment needed|review needed|analysis needed|not available/i.test(t)
+  const isSerious = (t?: string) =>
+    /critical|severe|serious|major|significant|fatal|legal|regulat|privacy|compliance|high risk|biggest/i.test(t || "")
+  const isWeakDemand = (t?: string) =>
+    /\b(?:low|limited|niche|saturat\w*|crowded|competit\w*|declin\w*|uncertain|retention|threat\w*|but)\b/i.test(t || "")
+  const DoubleCross = ({ title }: { title?: string }) => (
+    <span className="flex -space-x-2.5" role="img" aria-label={title}>
+      <Cross /> <Cross />
+    </span>
+  )
+  const plural = (n: number, one: string, many = one + "s") => `${n} ${n === 1 ? one : many}`
+
+  /** The highlighter: marks the opening sentence of AI prose as the part the margin judges. */
+  const HighlightLead = ({ text, className }: { text: string; className?: string }) => {
+    const clean = sanitizeMarkdown(text)
+    const [first = "", ...rest] = clean.split(/\n\s*\n/)
+    const isPlain = first && !/[*_`#[\]>|]|^\s*(?:[-+]|\d+\.)\s/m.test(first)
+    if (!isPlain) return <Markdown className={className}>{clean}</Markdown>
+    const m = first.match(/^([\s\S]+?[.!?])(\s[\s\S]*)?$/)
+    const lead = m ? m[1] : first
+    const tail = m?.[2] ?? ""
+    return (
+      <div className={className}>
+        <p className="mb-3 text-[0.9375rem] leading-[1.7] text-ink last:mb-0">
+          <mark className="hl bg-transparent text-ink">{lead}</mark>
+          {tail}
+        </p>
+        {rest.length ? <Markdown>{rest.join("\n\n")}</Markdown> : null}
+      </div>
+    )
+  }
+
+  /** Highlights the opening clause of a short judgment (up to the first comma, colon or full stop). */
+  const ClauseLead = ({ text }: { text: string }) => {
+    const m = text.match(/^(.{12,140}?[,;:.\u2014])(\s[\s\S]*)?$/)
+    if (!m || isPlaceholder(text)) return <>{text}</>
+    return (
+      <>
+        <mark className="hl bg-transparent text-ink">{m[1]}</mark>
+        {m[2] ?? ""}
+      </>
+    )
+  }
+
+  const ContinueButton = ({ to, label, hint }: { to: AnalysisStage; label: string; hint?: string }) => (
+    <div className="space-y-3">
+      <Button
+        size="lg"
+        onClick={() => proceedToStage(to)}
+        disabled={loading}
+        className="h-11 w-full justify-between px-4 text-[0.9375rem]"
+      >
+        {loading ? "Marking the next page…" : label}
+        {loading ? <Loader2 className="animate-spin" /> : <ArrowRight />}
+      </Button>
+      {hint ? <p className="text-meta text-pencil">{hint}</p> : null}
+    </div>
+  )
+
+  const EmptyLine = ({ children }: { children: React.ReactNode }) => (
+    <p className="text-sm italic text-pencil">{children}</p>
+  )
+
+  const LinkTitle = ({ href, children }: { href: string; children: React.ReactNode }) => (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="group inline-flex items-start gap-1 font-medium text-ink underline decoration-rule decoration-1 underline-offset-[3px] transition-colors hover:decoration-marker"
+    >
+      <span>{children}</span>
+      <ArrowUpRight className="mt-0.5 size-3.5 shrink-0 text-pencil transition-colors group-hover:text-marker" />
+    </a>
+  )
+
+  // 🎨 STAGE 0: THE BLANK SCRIPT
+  const renderInputStage = () => (
+    <form onSubmit={handleAnalyzeIdea}>
+      <Sheet>
+        <SheetRow
+          divider={false}
+          marginLabel="Context for the examiner"
+          bodyClassName="sm:py-9"
+          margin={
+            <div className="space-y-5">
+              <div>
+                <p className="text-sm font-semibold text-marker">Context for the examiner</p>
+                <p className="mt-1 text-meta text-pencil">Optional. It changes how strictly the idea is marked.</p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="projectType" className="text-meta font-medium text-ink-soft">What is it for?</Label>
+                <div className="relative">
+                  <select
+                    id="projectType"
+                    className={selectClass}
+                    value={formData.projectType}
+                    onChange={(e) => setFormData(prev => ({ ...prev, projectType: e.target.value }))}
+                  >
+                    <option value="">Not specified</option>
+                    <option value="MVP">MVP</option>
+                    <option value="Full Product">Full product</option>
+                    <option value="Prototype">Prototype</option>
+                    <option value="API/Service">API / service</option>
+                    <option value="Mobile App">Mobile app</option>
+                    <option value="Web App">Web app</option>
+                  </select>
+                  <SelectChevron />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="domain" className="text-meta font-medium text-ink-soft">Domain</Label>
+                <div className="relative">
+                  <select
+                    id="domain"
+                    className={selectClass}
+                    value={formData.domain}
+                    onChange={(e) => setFormData(prev => ({ ...prev, domain: e.target.value }))}
+                  >
+                    <option value="">Not specified</option>
+                    <option value="AI/ML">AI / machine learning</option>
+                    <option value="FinTech">FinTech</option>
+                    <option value="EdTech">EdTech</option>
+                    <option value="HealthTech">HealthTech</option>
+                    <option value="E-commerce">E-commerce</option>
+                    <option value="SaaS">SaaS</option>
+                    <option value="Social">Social</option>
+                    <option value="Gaming">Gaming</option>
+                    <option value="Productivity">Productivity</option>
+                    <option value="IoT">IoT</option>
+                    <option value="Other">Other</option>
+                  </select>
+                  <SelectChevron />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="experience" className="text-meta font-medium text-ink-soft">Your experience</Label>
+                <div className="relative">
+                  <select
+                    id="experience"
+                    className={selectClass}
+                    value={formData.experience}
+                    onChange={(e) => setFormData(prev => ({ ...prev, experience: e.target.value }))}
+                  >
+                    <option value="">Not specified</option>
+                    <option value="Beginner">Beginner</option>
+                    <option value="Intermediate">Intermediate</option>
+                    <option value="Advanced">Advanced</option>
+                  </select>
+                  <SelectChevron />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="timeline" className="text-meta font-medium text-ink-soft">Time you have</Label>
+                <div className="relative">
+                  <select
+                    id="timeline"
+                    className={selectClass}
+                    value={formData.timeline}
+                    onChange={(e) => setFormData(prev => ({ ...prev, timeline: e.target.value }))}
+                  >
+                    <option value="">Not specified</option>
+                    <option value="1-2 weeks">1–2 weeks</option>
+                    <option value="1-2 months">1–2 months</option>
+                    <option value="3-6 months">3–6 months</option>
+                    <option value="6+ months">6+ months</option>
+                  </select>
+                  <SelectChevron />
+                </div>
+              </div>
+            </div>
+          }
+        >
+          <div className="flex h-full flex-col">
+            <h1 className="text-[1.75rem] font-semibold leading-tight tracking-[-0.025em] text-ink sm:text-[2rem]">
+              Write down your idea
+            </h1>
+            <p className="mt-2 max-w-[60ch] text-[0.9375rem] text-ink-soft">
+              Say what it does, who it is for, and anything technical you already know. It gets marked as honestly as an
+              examiner would, then planned if it is worth building.
+            </p>
+            <Label htmlFor="project-idea" className="sr-only">Your project idea</Label>
             <Textarea
               id="project-idea"
-              placeholder="Describe your project idea in detail... (e.g., A mobile app that helps students find study groups with location-based matching and real-time chat features)"
-              className="min-h-32 text-base"
+              placeholder="e.g. A campus app that matches students into study groups by course and free periods, with a shared timetable and chat."
+              className="ruled mt-6 min-h-[16rem] flex-1 resize-none rounded-none border-0 border-b border-rule bg-transparent px-0 py-1.5 text-[1.0625rem] leading-8 md:text-[1.0625rem] dark:bg-transparent text-ink shadow-none placeholder:text-pencil/80 focus-visible:border-marker focus-visible:ring-0"
               value={formData.idea}
               onChange={(e) => setFormData(prev => ({ ...prev, idea: e.target.value }))}
             />
-            <p className="text-xs text-muted-foreground">
-              💡 Tip: Be specific about features, target users, and technical requirements for better analysis
-            </p>
-          </div>
-
-          <Button
-            type="submit"
-            size="lg"
-            className="w-full text-lg py-6"
-            disabled={!formData.idea.trim() || analyzing}
-          >
-            {analyzing ? (
-              <>
-                <Loader2 className="mr-2 w-5 h-5 animate-spin" />
-                Analyzing Your Idea...
-              </>
-            ) : (
-              <>
-                Get an Overview
-                <Play className="ml-2 w-5 h-5" />
-              </>
-            )}
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
-  )
-
-  const renderQuickSnapshot = () => {
-    if (!analysis) return null
-
-    return (
-      <div className="space-y-16">
-        {/* Centered Header with Edit Button */}
-        <div className="flex items-center justify-between">
-          <div className="flex-1"></div>
-          <div className="text-center">
-            <h1 className="text-4xl font-bold flex items-center justify-center gap-3">
-              <Zap className="w-8 h-8 text-blue-500" />
-              IS IT WORTH IT?
-            </h1>
-          </div>
-          <div className="flex-1 flex justify-end items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={goToPreviousStage}>
-              Back
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={goBackToInput}
-              className="flex items-center gap-2"
-            >
-              <Edit3 className="w-4 h-4" />
-              Edit Prompt
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={regenerateStage1}
-              disabled={loading}
-              className="flex items-center gap-2"
-            >
-              {loading ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <RefreshCw className="w-4 h-4" />
-              )}
-              Regenerate
-            </Button>
-          </div>
-        </div>
-
-        {/* Main Layout: Left Elements + Right Reality Check */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-          
-          {/* LEFT SIDE - All elements as in wireframe */}
-          <div className="space-y-8">
-            
-            {/* Project Details */}
-            <div className="space-y-6">
-              {/* Centered Project Title */}
-              <div className="text-center">
-                <h3 className="text-3xl font-bold">{analysis.projectTitle}</h3>
-              </div>
-              
-              {/* Category and Targeted Audience - Side by side */}
-              {(() => {
-                const { category, tags } = analysis ? generateCategoryAndTags(analysis.projectDescription || "", analysis.projectTitle || "") : { category: "Tech", tags: [] }
-                return (
-                  <div className="flex items-start justify-between gap-8">
-                    <div className="flex flex-col">
-                      <span className="text-lg font-semibold mb-1">Category:</span>
-                      <span className="text-lg text-muted-foreground">{category}</span>
-                    </div>
-                    <div className="flex flex-col text-right">
-                      <span className="text-lg font-semibold mb-1">Targeted Audience:</span>
-                      <span className="text-lg text-muted-foreground">
-                        {analysis.targetUsersMarketFit?.primaryUsers || "General users"}
-                      </span>
-                    </div>
-                  </div>
-                )
-              })()}
-            </div>
-
-
-
-            {/* Three Metric Boxes - Matching wireframe layout */}
-            <div className="space-y-6">
-              {/* Top row - 2 boxes */}
-              <div className="grid grid-cols-2 gap-6">
-                <div className="p-6 border rounded-lg text-center bg-card">
-                  <div className={`text-4xl font-bold mb-2 ${getFeasibilityColor(analysis.feasibilityScore)}`}>
-                    {analysis.feasibilityScore}/10
-                  </div>
-                  <p className="text-sm font-semibold text-muted-foreground">Feasibility Score</p>
-                </div>
-                
-                <div className="p-6 border rounded-lg text-center bg-card">
-                  <div className="text-4xl font-bold text-green-500 mb-2">{analysis.successProbability}%</div>
-                  <p className="text-sm font-semibold text-muted-foreground">Success Probability</p>
-                </div>
-              </div>
-              
-              {/* Bottom row - 1 box centered */}
-              <div className="flex justify-center">
-                <div className="p-6 border rounded-lg text-center bg-card w-64">
-                  <div className="text-4xl font-bold text-purple-500 mb-2">{analysis.difficultyLevel}</div>
-                  <p className="text-sm font-semibold text-muted-foreground">Difficulty Level</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Honest Reality Check */}
-          <div className="flex items-center justify-center">
-            <div className={`p-8 rounded-xl w-full min-h-[500px] flex flex-col ${getRealityCheckColor(analysis.feasibilityScore)}`}>
-              <div className="space-y-6 h-full">
-                <h4 className="font-bold text-xl flex items-center justify-center gap-2">
-                  <Shield className="w-6 h-6" />
-                  Honest Reality Check
-                </h4>
-                
-                <div className="flex-1 flex flex-col justify-center max-w-md mx-auto space-y-4">
-                  <TypingText 
-                    text={analysis.honestRealityCheck || analysis.honestAiFeedback}
-                    speed={25}
-                    className="text-sm text-left"
-                  />
-                  
-                  {/* AI Verdict within Honest Reality Check */}
-                  <div className="mt-6 pt-4 border-t border-white/20">
-                    <h5 className="font-semibold text-sm mb-2 text-white/90">AI Verdict:</h5>
-                    <TypingText 
-                      text={analysis.aiVerdict || generateAIVerdict(analysis.feasibilityScore, analysis.successProbability, analysis.difficultyLevel)}
-                      speed={25}
-                      className="text-sm text-left"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* CTA Section */}
-        <div className="text-center pt-8 border-t-2 border-dashed">
-          <Button
-            size="lg"
-            onClick={() => proceedToStage(AnalysisStage.EXECUTIVE_SUMMARY)}
-            disabled={loading}
-            className="text-xl px-12 py-6 h-auto"
-          >
-            {loading ? (
-              <Loader2 className="mr-3 w-6 h-6 animate-spin" />
-            ) : (
-              <Unlock className="mr-3 w-6 h-6" />
-            )}
-            Still Convinced? Proceed
-          </Button>
-        </div>
-      </div>
-    )
-  }
-
-  const renderExecutiveSummary = () => {
-    if (!analysis || !stageData.stage2) return null
-
-    return (
-      <div className="space-y-6">
-        {/* Stage 2:Summary */}
-        <Card className="bg-green-500/5">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-2xl flex items-center gap-2">
-                  <FileText className="w-6 h-6 text-green-500" />
-                  Elaborated Summary.
-                </CardTitle>
-                <CardDescription>
-                  strategic overview
-                </CardDescription>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button variant="ghost" size="sm" onClick={goToPreviousStage}>
-                  Back
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={goBackToInput}
-                  className="flex items-center gap-2"
-                >
-                  <Edit3 className="w-4 h-4" />
-                  Edit Prompt
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={regenerateStage2}
-                  disabled={loading}
-                  className="flex items-center gap-2"
-                >
-                  {loading ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <RefreshCw className="w-4 h-4" />
-                  )}
-                  Regenerate
-                </Button>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Honest Feedback */}
-            <div className="border-l-4 border-red-500 pl-4 bg-red-500/5 p-4 rounded-r-lg">
-              <h4 className="font-bold text-red-600 mb-3">Honest Feedback</h4>
-              <div className="text-sm space-y-3">
-                <TypingText
-                  text={sanitizeMarkdown(stageData.stage2?.analysis?.honestAiFeedback || analysis?.honestAiFeedback || "Analysis feedback not available")}
-                  speed={15}
-                  className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-red-600 prose-strong:text-red-700 prose-li:text-gray-700 dark:prose-li:text-gray-300"
-                />
-              </div>
-            </div>
-
-            {/* Key Strengths and Challenges */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="border-l-4 border-green-500 pl-4 bg-green-500/5 p-4 rounded-r-lg">
-                <h4 className="font-bold text-green-600 mb-3">Key Strengths</h4>
-                <ul className="space-y-2 text-sm">
-                  <li className="flex items-start gap-2">
-                    <span className="text-green-500 font-bold">✓</span>
-                    <div>
-                      <strong>Value Proposition:</strong> {stageData.stage2?.analysis?.keyStrengths?.valueProposition || analysis?.keyStrengths?.valueProposition || "Value proposition assessment needed"}
-                    </div>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-green-500 font-bold">✓</span>
-                    <div>
-                      <strong>Market Fit:</strong> {stageData.stage2?.analysis?.keyStrengths?.marketFit || analysis?.keyStrengths?.marketFit || "Market fit analysis needed"}
-                    </div>
-                  </li>
-                </ul>
-              </div>
-
-              <div className="border-l-4 border-yellow-500 pl-4 bg-yellow-500/5 p-4 rounded-r-lg">
-                <h4 className="font-bold text-yellow-600 mb-3">Potential Challenges</h4>
-                <ul className="space-y-2 text-sm">
-                  <li className="flex items-start gap-2">
-                    <span className="text-yellow-500 font-bold">⚠</span>
-                    <div>
-                      <strong>Technical:</strong> {stageData.stage2?.analysis?.potentialChallenges?.technicalRisks || analysis?.potentialChallenges?.technicalRisks || "Technical risk assessment needed"}
-                    </div>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-yellow-500 font-bold">⚠</span>
-                    <div>
-                      <strong>Usability:</strong> {stageData.stage2?.analysis?.potentialChallenges?.usabilityIssues || analysis?.potentialChallenges?.usabilityIssues || "Usability review needed"}
-                    </div>
-                  </li>
-                </ul>
-              </div>
-            </div>
-
-            {/* Target Users & Quick Wins */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="bg-purple-500/10 p-4 rounded-lg border border-purple-500/30">
-                <h4 className="font-bold text-purple-600 mb-3 flex items-center gap-2">
-                  <Target className="w-4 h-4" />
-                  Target Users & Market
-                </h4>
-                <p className="text-sm mb-2"><strong>Primary Users:</strong> {stageData.stage1?.targetUsersMarketFit?.primaryUsers || analysis?.targetUsersMarketFit?.primaryUsers || "User analysis needed"}</p>
-                    <p className="text-sm"><strong>Market Demand:</strong> {
-                  stageData.stage1?.targetUsersMarketFit?.marketDemand ||
-                  analysis?.targetUsersMarketFit?.marketDemand ||
-                  (stageData.stage1?.detectedDomain ? `Growing demand in ${stageData.stage1.detectedDomain} sector` :
-                   analysis?.detectedDomain ? `Growing demand in ${analysis.detectedDomain} sector` :
-                   "Market demand assessment needed")
-                }</p>
-              </div>
-
-              <div className="bg-blue-500/10 p-4 rounded-lg border border-blue-500/30">
-                <h4 className="font-bold text-blue-600 mb-3 flex items-center gap-2">
-                  <Lightbulb className="w-4 h-4" />
-                  Quick Wins
-                </h4>
-                {stageData.stage2.quickWins.map((win, index) => (
-                  <div key={index} className="mb-2 text-sm">
-                    <strong>{win.title}:</strong> {win.description} ({win.timeEstimate})
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Expert Articles */}
-            <div className="bg-slate-500/10 p-4 rounded-lg border border-slate-500/30">
-              <h4 className="font-bold text-slate-600 dark:text-slate-400 mb-3 flex items-center gap-2">
-                <BookOpen className="w-4 h-4" />
-                What Experts Say?
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {stageData.stage2.expertArticles.map((article, index) => (
-                  <div key={index} className="border rounded p-3 bg-card">
-                    <h5 className="font-semibold text-sm mb-1">
-                      <a href={article.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-                        {article.title}
-                      </a>
-                    </h5>
-                    <p className="text-xs text-muted-foreground mb-1">{article.source}</p>
-                    <p className="text-xs">{article.summary}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Existing Solutions */}
-            <div className="bg-orange-500/10 p-4 rounded-lg border border-orange-500/30">
-              <h4 className="font-bold text-orange-600 dark:text-orange-400 mb-3 flex items-center gap-2">
-                <ExternalLink className="w-4 h-4" />
-                Popular Existing Solutions
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {stageData.stage2.existingSolutions.map((solution, index) => (
-                  <div key={index} className="border rounded p-3 bg-card">
-                    <h5 className="font-semibold text-sm mb-1">
-                      <a href={solution.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-                        {solution.name}
-                      </a>
-                    </h5>
-                    <Badge variant="outline" className="text-xs mb-2">{solution.category}</Badge>
-                    <p className="text-xs">{solution.description}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* GitHub Repositories */}
-            <div className="bg-gray-500/10 p-4 rounded-lg border border-gray-500/30">
-              <h4 className="font-bold text-gray-600 dark:text-gray-400 mb-3 flex items-center gap-2">
-                <GitBranch className="w-4 h-4" />
-                Similar GitHub Projects
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {stageData.stage2.githubRepos.slice(0, 4).map((repo, index) => (
-                  <div key={index} className="border rounded p-3 bg-card">
-                    <h5 className="font-semibold text-sm mb-1">
-                      <a href={repo.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-                        {repo.owner}/{repo.name}
-                      </a>
-                    </h5>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-                      <Badge variant="outline">{repo.language}</Badge>
-                      <span>⭐ {repo.stars.toLocaleString()}</span>
-                    </div>
-                    <p className="text-xs">{repo.description}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* CTA */}
-            <div className="text-center pt-4">
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-4">
+              <p className="text-meta text-pencil tabular">
+                {formData.idea.trim().length} characters{formData.idea.trim().length < 15 ? " · at least 15 needed" : ""}
+              </p>
               <Button
+                type="submit"
                 size="lg"
-                onClick={() => proceedToStage(AnalysisStage.ROADMAPS)}
-                disabled={loading}
-                className="text-lg px-8 py-4"
+                className="h-11 px-5 text-[0.9375rem]"
+                disabled={!formData.idea.trim() || analyzing}
               >
-                {loading ? (
-                  <Loader2 className="mr-2 w-5 h-5 animate-spin" />
-                ) : (
-                  <ArrowRight className="mr-2 w-5 h-5" />
-                )}
-                Still Interested? Proceed to Roadmaps
+                {analyzing ? <Loader2 className="animate-spin" /> : null}
+                {analyzing ? "Marking your idea…" : "Mark my idea"}
+                {!analyzing ? <ArrowRight /> : null}
               </Button>
             </div>
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </SheetRow>
+      </Sheet>
+    </form>
+  )
+
+  // 🎨 WHILE THE EXAMINER READS
+  const renderMarking = () => (
+    <Sheet aria-busy="true" aria-live="polite">
+      <SheetRow
+        divider={false}
+        marginFirstOnMobile
+        margin={
+          <div className="space-y-4">
+            <p className="font-hand text-2xl font-bold text-marker">Marking…</p>
+            <div className="relative h-px w-full overflow-hidden bg-rule">
+              <div className="absolute inset-0 animate-pencil-scan bg-marker" />
+            </div>
+            <p className="text-meta text-pencil">Reading the idea, checking feasibility, and weighing the risks.</p>
+          </div>
+        }
+      >
+        <p className="label-caps">Your idea</p>
+        <p className="mt-3 max-w-[65ch] text-[1.0625rem] leading-8 text-ink">{formData.idea}</p>
+        <div className="ruled mt-6 h-40" aria-hidden />
+      </SheetRow>
+    </Sheet>
+  )
+
+  // 🎨 STAGE 1: QUICK SNAPSHOT
+  const renderQuickSnapshot = () => {
+    if (!analysis) return null
+    const { category } = generateCategoryAndTags(analysis.projectDescription || "", analysis.projectTitle || "")
+    const badge = getFeasibilityBadge(analysis.feasibilityScore)
+    const multiplier = parseFloat(analysis.contextAdjustment?.multiplier || "1")
+    const verdict = analysis.aiVerdict || generateAIVerdict(analysis.feasibilityScore, analysis.successProbability, analysis.difficultyLevel)
+
+    return (
+      <Sheet>
+        <SheetRow
+          marginFirstOnMobile
+          marginLabel="Mark"
+          margin={
+            <div className="space-y-5">
+              <div className="flex items-center gap-3 lg:flex-col lg:items-start">
+                <CircledScore score={analysis.feasibilityScore} />
+                <div>
+                  <p className="text-[1.0625rem] font-semibold text-marker">{badge.text}</p>
+                  <p className="text-meta text-pencil">Feasibility, out of 10</p>
+                </div>
+              </div>
+              <dl className="grid grid-cols-2 gap-4 border-t border-rule pt-4">
+                <Fact label="Success odds"><span className="tabular">{analysis.successProbability}%</span></Fact>
+                <Fact label="Difficulty">{analysis.difficultyLevel}</Fact>
+              </dl>
+            </div>
+          }
+        >
+          <h1 className="max-w-[40ch] text-[1.5rem] font-semibold leading-snug tracking-[-0.02em] text-ink sm:text-[1.75rem]">
+            {analysis.projectDescription}
+          </h1>
+          <dl className="mt-6 flex flex-wrap gap-x-8 gap-y-4">
+            <Fact label="Category">{category}</Fact>
+            {analysis.detectedDomain ? <Fact label="Domain">{analysis.detectedDomain}</Fact> : null}
+            {analysis.requiredExperience ? <Fact label="Experience needed">{analysis.requiredExperience}</Fact> : null}
+          </dl>
+        </SheetRow>
+
+        <SheetRow
+          marginLabel="Examiner's note"
+          margin={
+            <MarginNote mark={scoreMark(analysis.feasibilityScore)} title="The honest read">
+              The highlighted line is what decides the mark.{" "}
+              {multiplier < 1
+                ? `Score lowered (×${analysis.contextAdjustment?.multiplier}) because the idea involves complex technology.`
+                : multiplier > 1
+                  ? `Score raised (×${analysis.contextAdjustment?.multiplier}) because the scope is simple.`
+                  : ""}
+            </MarginNote>
+          }
+        >
+          <SheetHeading>Reality check</SheetHeading>
+          <HighlightLead className="max-w-[68ch]" text={analysis.honestRealityCheck || analysis.honestAiFeedback} />
+        </SheetRow>
+
+        <SheetRow
+          margin={
+            isWeakDemand(analysis.targetUsersMarketFit?.marketDemand) ? (
+              <MarginNote mark={<Query title="Unproven" />} title="Demand is unproven">
+                The demand comes with a catch. Talk to five of these users before you build.
+              </MarginNote>
+            ) : (
+              <MarginNote mark={<Tick title="Clear" />} title="Clear audience">
+                Still talk to five of these users before you build.
+              </MarginNote>
+            )
+          }
+        >
+          <SheetHeading>Who it is for</SheetHeading>
+          <dl className="grid gap-5 sm:grid-cols-3">
+            <div>
+              <dt className="label-caps">Primary users</dt>
+              <dd className="mt-1.5 text-[0.9375rem] leading-relaxed text-ink">{analysis.targetUsersMarketFit?.primaryUsers}</dd>
+            </div>
+            <div>
+              <dt className="label-caps">Demand</dt>
+              <dd className="mt-1.5 text-[0.9375rem] leading-relaxed text-ink">{analysis.targetUsersMarketFit?.marketDemand}</dd>
+            </div>
+            <div>
+              <dt className="label-caps">How to validate</dt>
+              <dd className="mt-1.5 text-[0.9375rem] leading-relaxed text-ink">{analysis.targetUsersMarketFit?.userValidation}</dd>
+            </div>
+          </dl>
+        </SheetRow>
+
+        <SheetRow
+          marginLabel="Next"
+          margin={
+            <ContinueButton
+              to={AnalysisStage.EXECUTIVE_SUMMARY}
+              label="Continue to summary"
+              hint="Next: strengths, risks, research papers, and existing projects like yours."
+            />
+          }
+        >
+          <SheetHeading>Verdict</SheetHeading>
+          <HighlightLead className="max-w-[68ch]" text={verdict} />
+        </SheetRow>
+      </Sheet>
     )
   }
 
-  const renderRoadmaps = () => {
-    if (!analysis || !stageData.stage3) return null
+  // 🎨 STAGE 2: EXECUTIVE SUMMARY
+  const renderExecutiveSummary = () => {
+    if (!analysis || !stageData.stage2) return null
+    const s2 = stageData.stage2.analysis
+    const s2Score = typeof s2?.feasibilityScore === "number" ? s2.feasibilityScore : null
+    const strengths = s2?.keyStrengths || analysis.keyStrengths
+    const challenges = s2?.potentialChallenges || analysis.potentialChallenges
+    const strengthCount = [strengths?.valueProposition, strengths?.marketFit].filter((t) => !isPlaceholder(t)).length
+    const riskTexts = [challenges?.technicalRisks, challenges?.usabilityIssues, challenges?.marketRisks].filter((t) => !isPlaceholder(t))
+    const seriousCount = riskTexts.filter(isSerious).length
+    const scope = s2?.requirementsScope
+    const stack = s2?.techStack
+    const stackGroups = stack
+      ? ([
+          ["Frontend", stack.frontend],
+          ["Backend", stack.backend],
+          ["Database", stack.database],
+          ["Tools", stack.tools],
+        ] as const).filter(([, items]) => items && items.length > 0)
+      : []
 
     return (
-      <div className="space-y-6">
-        {/* Stage 3: Roadmaps */}
-        <Card className="bg-yellow-500/5">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-2xl flex items-center gap-2">
-                  <MapPin className="w-6 h-6 text-yellow-500" />
-                  Stage 3: Project Roadmap + SDLC Summary
-                </CardTitle>
-                <CardDescription>
-                  Execution plan and development flow tied to SDLC methodology
-                </CardDescription>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button variant="ghost" size="sm" onClick={goToPreviousStage}>
-                  Back
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={goBackToInput}
-                  className="flex items-center gap-2"
-                >
-                  <Edit3 className="w-4 h-4" />
-                  Edit Prompt
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={regenerateStage3}
-                  disabled={loading}
-                  className="flex items-center gap-2"
-                >
-                  {loading ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <RefreshCw className="w-4 h-4" />
-                  )}
-                  Regenerate
-                </Button>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Project Milestones */}
+      <Sheet>
+        <SheetRow
+          marginFirstOnMobile
+          marginLabel="Mark"
+          margin={
             <div className="space-y-4">
-              <h4 className="font-bold text-lg flex items-center gap-2">
-                <Calendar className="w-5 h-5" />
-                Project Roadmap
-              </h4>
-              {stageData.stage3.projectMilestones.map((milestone, index) => (
-                <div key={index} className="border-l-4 border-yellow-500 pl-4 bg-yellow-500/10 p-4 rounded-r-lg">
-                  <div className="flex justify-between items-start mb-2">
-                    <h5 className="font-semibold text-yellow-600 dark:text-yellow-400">{milestone.phase}</h5>
-                    <Badge variant="outline">{milestone.duration}</Badge>
-                  </div>
-                  <div className="space-y-2">
-                    <div>
-                      <strong className="text-sm">Deliverables:</strong>
-                      <ul className="text-sm mt-1">
-                        {milestone.deliverables.map((deliverable, idx) => (
-                          <li key={idx} className="flex items-start gap-2">
-                            <span className="text-yellow-500">•</span>
-                            {deliverable}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                    {milestone.dependencies.length > 0 && (
-                      <div>
-                        <strong className="text-sm">Dependencies:</strong>
-                        <span className="text-sm ml-2">{milestone.dependencies.join(', ')}</span>
-                      </div>
-                    )}
-                  </div>
+              {s2Score !== null ? (
+                <>
+                  <CircledScore score={s2Score} size="md" />
+                  <p className="text-sm text-ink-soft">
+                    Re-marked with more detail. Snapshot gave{" "}
+                    <span className="font-semibold text-ink tabular">{analysis.feasibilityScore}/10</span>
+                    {s2Score !== analysis.feasibilityScore ? (
+                      <>, this page gives <span className="font-semibold text-marker tabular">{s2Score}/10</span>.</>
+                    ) : "; this page agrees."}
+                  </p>
+                </>
+              ) : (
+                <MarginNote mark={scoreMark(analysis.feasibilityScore)} title={`Snapshot mark: ${analysis.feasibilityScore}/10`}>
+                  The detailed re-mark didn&apos;t load; the summary below uses the snapshot.
+                </MarginNote>
+              )}
+              <p className="border-t border-rule pt-3 text-meta text-ink-soft tabular">
+                {plural(strengthCount, "strength")} · {plural(riskTexts.length, "risk")}
+                {seriousCount > 0 ? <span className="font-semibold text-marker"> · {seriousCount} serious</span> : null}
+              </p>
+            </div>
+          }
+        >
+          <h1 className="text-[1.5rem] font-semibold tracking-[-0.02em] text-ink sm:text-[1.75rem]">The full assessment</h1>
+          <Markdown className="mt-5 max-w-[68ch]">
+            {sanitizeMarkdown(s2?.honestAiFeedback || analysis.honestAiFeedback || "Analysis feedback not available")}
+          </Markdown>
+        </SheetRow>
+
+        <SheetRow
+          margin={
+            strengthCount > 0 ? (
+              <MarginNote mark={<Tick />} title={`${plural(strengthCount, "strength")} that hold up`}>Lead with these when you pitch it.</MarginNote>
+            ) : (
+              <MarginNote mark={<Query />} title="No clear strength">The analysis couldn&apos;t name one. That is a finding in itself.</MarginNote>
+            )
+          }
+        >
+          <SheetHeading>Strengths</SheetHeading>
+          <dl className="grid gap-5 sm:grid-cols-2">
+            <div>
+              <dt className="label-caps">Value proposition</dt>
+              <dd className="mt-1.5 text-[0.9375rem] leading-relaxed text-ink">{strengths?.valueProposition || "Value proposition assessment needed"}</dd>
+            </div>
+            <div>
+              <dt className="label-caps">Market fit</dt>
+              <dd className="mt-1.5 text-[0.9375rem] leading-relaxed text-ink">{strengths?.marketFit || "Market fit analysis needed"}</dd>
+            </div>
+          </dl>
+        </SheetRow>
+
+        <SheetRow
+          margin={
+            <MarginNote
+              mark={seriousCount > 0 ? <DoubleCross title="Serious risk" /> : <Cross />}
+              title={seriousCount > 0 ? `${plural(seriousCount, "serious risk")}` : plural(riskTexts.length, "risk")}
+            >
+              The highlighted part of each is what to solve first.
+            </MarginNote>
+          }
+        >
+          <SheetHeading>Risks</SheetHeading>
+          <dl className="grid gap-5 sm:grid-cols-3">
+            <div>
+              <dt className="label-caps">Technical</dt>
+              <dd className="mt-1.5 text-[0.9375rem] leading-relaxed text-ink"><ClauseLead text={challenges?.technicalRisks || "Technical risk assessment needed"} /></dd>
+            </div>
+            <div>
+              <dt className="label-caps">Usability</dt>
+              <dd className="mt-1.5 text-[0.9375rem] leading-relaxed text-ink"><ClauseLead text={challenges?.usabilityIssues || "Usability review needed"} /></dd>
+            </div>
+            <div>
+              <dt className="label-caps">Market</dt>
+              <dd className="mt-1.5 text-[0.9375rem] leading-relaxed text-ink"><ClauseLead text={challenges?.marketRisks || "Market risk analysis needed"} /></dd>
+            </div>
+          </dl>
+        </SheetRow>
+
+        {scope && (scope.mustHaveFeatures?.length || scope.niceToHaveFeatures?.length || scope.constraints?.length) ? (
+          <SheetRow
+            margin={
+              (scope.mustHaveFeatures?.length || 0) > 5 ? (
+                <MarginNote mark={<Query />} title={`${scope.mustHaveFeatures?.length} must-haves is a lot`}>
+                  Cut to the five that prove the idea. The rest waits until users ask.
+                </MarginNote>
+              ) : (
+                <MarginNote mark={<Tick />} title={`${plural(scope.mustHaveFeatures?.length || 0, "must-have")}`}>
+                  A buildable core. Everything else waits until users ask for it.
+                </MarginNote>
+              )
+            }
+          >
+            <SheetHeading>Scope</SheetHeading>
+            <div className="grid gap-6 sm:grid-cols-3">
+              {([
+                ["Must have", scope.mustHaveFeatures],
+                ["Nice to have", scope.niceToHaveFeatures],
+                ["Constraints", scope.constraints],
+              ] as const).map(([label, items]) => (
+                <div key={label}>
+                  <p className="label-caps">{label}</p>
+                  <ul className="mt-2 space-y-1.5 text-[0.9375rem] text-ink">
+                    {(items || []).map((item, i) => (
+                      <li key={i} className="flex gap-2"><span className="text-pencil">–</span><span>{item}</span></li>
+                    ))}
+                  </ul>
                 </div>
               ))}
             </div>
+          </SheetRow>
+        ) : null}
 
-            {/* SDLC Summary */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="bg-blue-500/10 p-4 rounded-lg border border-blue-500/30">
-                <h4 className="font-bold text-blue-600 dark:text-blue-400 mb-3">SDLC Methodology</h4>
-                <p className="text-sm">{stageData.stage3.sdlcMapping}</p>
-              </div>
-              <div className="bg-green-500/10 p-4 rounded-lg border border-green-500/30">
-                <h4 className="font-bold text-green-600 dark:text-green-400 mb-3">QA & Deployment</h4>
-                <p className="text-sm">{stageData.stage3.qaApproach}</p>
-              </div>
+        {stackGroups.length > 0 ? (
+          <SheetRow
+            margin={(() => {
+              const total = stackGroups.reduce((n, [, items]) => n + items.length, 0)
+              return total > 10 ? (
+                <MarginNote mark={<Query />} title={`${total} technologies`}>A lot to learn at once. Drop anything you haven&apos;t used before unless it is essential.</MarginNote>
+              ) : (
+                <MarginNote mark={<Tick />} title={`${total} technologies`}>A manageable stack to learn and build with.</MarginNote>
+              )
+            })()}
+          >
+            <SheetHeading>Suggested stack</SheetHeading>
+            <dl className="grid gap-4 sm:grid-cols-2">
+              {stackGroups.map(([label, items]) => (
+                <div key={label}>
+                  <dt className="label-caps">{label}</dt>
+                  <dd className="mt-2 flex flex-wrap gap-1.5">
+                    {items.map((t, i) => <Chip key={i}>{t}</Chip>)}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </SheetRow>
+        ) : null}
+
+        <SheetRow
+          margin={
+            <MarginNote mark={<Tick />} title={plural(stageData.stage2.quickWins.length, "quick win")}>
+              Start here this week.
+            </MarginNote>
+          }
+        >
+          <div className="grid gap-8 sm:grid-cols-2">
+            <div>
+              <SheetHeading level={3}>Market</SheetHeading>
+              <p className="text-[0.9375rem] leading-relaxed text-ink">
+                <span className="font-semibold">Users: </span>
+                {stageData.stage1?.targetUsersMarketFit?.primaryUsers || analysis.targetUsersMarketFit?.primaryUsers || "User analysis needed"}
+              </p>
+              <p className="mt-2 text-[0.9375rem] leading-relaxed text-ink">
+                <span className="font-semibold">Demand: </span>
+                {stageData.stage1?.targetUsersMarketFit?.marketDemand ||
+                  analysis.targetUsersMarketFit?.marketDemand ||
+                  (analysis.detectedDomain ? `Growing demand in ${analysis.detectedDomain} sector` : "Market demand assessment needed")}
+              </p>
             </div>
-
-            {/* Team Roles */}
-            <div className="space-y-4">
-              <h4 className="font-bold text-lg flex items-center gap-2">
-                <Users className="w-5 h-5" />
-                Suggested Team Roles & FTE Estimates
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {stageData.stage3.teamRoles.map((role, index) => (
-                  <div key={index} className="border rounded p-4 bg-card">
-                    <div className="flex justify-between items-start mb-2">
-                      <h5 className="font-semibold">{role.role}</h5>
-                      <Badge variant="secondary">{role.fteEstimate} FTE</Badge>
-                    </div>
-                    <p className="text-sm text-muted-foreground mb-2">{role.description}</p>
-                    <div className="flex flex-wrap gap-1">
-                      {role.skills.map((skill, idx) => (
-                        <Badge key={idx} variant="outline" className="text-xs">{skill}</Badge>
-                      ))}
-                    </div>
-                  </div>
+            <div>
+              <SheetHeading level={3}>Quick wins</SheetHeading>
+              <ul className="space-y-3">
+                {stageData.stage2.quickWins.map((win, index) => (
+                  <li key={index} className="text-[0.9375rem] leading-relaxed">
+                    <span className="font-semibold text-ink">{win.title}</span>
+                    <span className="text-pencil tabular"> · {win.timeEstimate}</span>
+                    <p className="text-ink-soft">{win.description}</p>
+                  </li>
                 ))}
-              </div>
+              </ul>
             </div>
+          </div>
+        </SheetRow>
 
-            {/* CTA */}
-            <div className="text-center pt-4">
-              <Button
-                size="lg"
-                onClick={() => proceedToStage(AnalysisStage.TECH_ROADMAP)}
-                disabled={loading}
-                className="text-lg px-8 py-4"
-              >
-                {loading ? (
-                  <Loader2 className="mr-2 w-5 h-5 animate-spin" />
-                ) : (
-                  <Code className="mr-2 w-5 h-5" />
-                )}
-                Ready for Technical Details?
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+        <SheetRow
+          margin={
+            stageData.stage2.expertArticles.length > 0 ? (
+              <MarginNote mark={<Query />} title={plural(stageData.stage2.expertArticles.length, "source")}>Read the abstracts before you claim it&apos;s new.</MarginNote>
+            ) : (
+              <MarginNote mark={<Query />} title="Nothing found">No papers matched. Search Google Scholar yourself before calling it new.</MarginNote>
+            )
+          }
+        >
+          <SheetHeading>What researchers have published</SheetHeading>
+          {stageData.stage2.expertArticles.length === 0 ? (
+            <EmptyLine>No papers found for this idea.</EmptyLine>
+          ) : (
+            <ul className="divide-y divide-rule">
+              {stageData.stage2.expertArticles.map((article, index) => (
+                <li key={index} className="py-3 first:pt-0 last:pb-0">
+                  <LinkTitle href={article.url}>{article.title}</LinkTitle>
+                  <p className="mt-0.5 text-meta text-pencil">{article.source}</p>
+                  <p className="mt-1 line-clamp-2 max-w-[75ch] text-sm leading-relaxed text-ink-soft">{article.summary}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </SheetRow>
+
+        <SheetRow
+          margin={
+            stageData.stage2.existingSolutions.length > 0 ? (
+              <MarginNote mark={<Query />} title={`${stageData.stage2.existingSolutions.length} already out there`}>Be ready to say how yours is different.</MarginNote>
+            ) : (
+              <MarginNote mark={<Query />} title="None found">The search found nothing. Check by hand before you claim it is new.</MarginNote>
+            )
+          }
+        >
+          <SheetHeading>Existing solutions</SheetHeading>
+          {stageData.stage2.existingSolutions.length === 0 ? (
+            <EmptyLine>No existing solutions found.</EmptyLine>
+          ) : (
+            <ul className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
+              {stageData.stage2.existingSolutions.map((solution, index) => (
+                <li key={index}>
+                  <LinkTitle href={solution.url}>{solution.name}</LinkTitle>
+                  <p className="mt-0.5 text-meta text-pencil">{solution.category}</p>
+                  <p className="mt-1 text-sm leading-relaxed text-ink-soft">{solution.description}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </SheetRow>
+
+        <SheetRow
+          margin={
+            stageData.stage2.githubRepos.length > 0 ? (
+              <MarginNote mark={<Query />} title={plural(Math.min(stageData.stage2.githubRepos.length, 4), "similar repo")}>Read their code before you design yours. Reuse is allowed; copying isn&apos;t.</MarginNote>
+            ) : (
+              <MarginNote mark={<Query />} title="None found">No similar repositories came back.</MarginNote>
+            )
+          }
+        >
+          <SheetHeading>Similar projects on GitHub</SheetHeading>
+          {stageData.stage2.githubRepos.length === 0 ? (
+            <EmptyLine>No repositories found. GitHub search may be unavailable right now.</EmptyLine>
+          ) : (
+            <ul className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
+              {stageData.stage2.githubRepos.slice(0, 4).map((repo, index) => (
+                <li key={index}>
+                  <LinkTitle href={repo.url}>{repo.owner}/{repo.name}</LinkTitle>
+                  <p className="mt-0.5 flex items-center gap-3 text-meta text-pencil tabular">
+                    <span>{repo.language}</span>
+                    <span className="inline-flex items-center gap-1"><Star className="size-3" aria-hidden />{repo.stars.toLocaleString()}</span>
+                  </p>
+                  <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-ink-soft">{repo.description}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </SheetRow>
+
+        <SheetRow
+          marginLabel="Next"
+          margin={
+            <ContinueButton
+              to={AnalysisStage.ROADMAPS}
+              label="Continue to roadmap"
+              hint="Next: milestones, team roles, and how to test it."
+            />
+          }
+        >
+          <SheetHeading>Still worth it?</SheetHeading>
+          <p className="max-w-[60ch] text-[0.9375rem] leading-relaxed text-ink-soft">
+            If the risks above feel bigger than the strengths, edit the idea and mark it again before planning it.
+          </p>
+        </SheetRow>
+      </Sheet>
     )
   }
 
+  // 🎨 STAGE 3: ROADMAP
+  const renderRoadmaps = () => {
+    if (!analysis || !stageData.stage3) return null
+    const totalFte = stageData.stage3.teamRoles.reduce((sum, r) => sum + (Number(r.fteEstimate) || 0), 0)
+
+    return (
+      <Sheet>
+        <SheetRow marginFirstOnMobile margin={<MarginNote mark={<Tick />} title={`${stageData.stage3.projectMilestones.length} phases`}>Each phase starts when the one before it is done.</MarginNote>}>
+          <h1 className="text-[1.5rem] font-semibold tracking-[-0.02em] text-ink sm:text-[1.75rem]">How to build it</h1>
+        </SheetRow>
+
+        {stageData.stage3.projectMilestones.map((milestone, index) => (
+          <SheetRow
+            key={index}
+            marginDesktopOnly
+            margin={
+              <div>
+                <p className="font-hand text-[1.6rem] font-bold leading-none text-marker">{milestone.duration}</p>
+                {milestone.dependencies.length > 0 ? (
+                  <p className="mt-2 text-meta text-pencil">After {milestone.dependencies.join(", ")}</p>
+                ) : (
+                  <p className="mt-2 text-meta text-pencil">Starts first</p>
+                )}
+              </div>
+            }
+          >
+            <div className="flex gap-4">
+              <span className="font-mono text-meta text-pencil tabular pt-1">{String(index + 1).padStart(2, "0")}</span>
+              <div className="min-w-0">
+                <h2 className="text-[1.125rem] font-semibold text-ink">{milestone.phase}</h2>
+                <p className="mt-0.5 font-hand text-lg font-bold leading-tight text-marker lg:hidden">{milestone.duration}</p>
+                <ul className="mt-2 grid gap-x-6 gap-y-1.5 text-[0.9375rem] text-ink sm:grid-cols-2">
+                  {milestone.deliverables.map((deliverable, idx) => (
+                    <li key={idx} className="flex gap-2"><span className="text-pencil">–</span><span>{deliverable}</span></li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </SheetRow>
+        ))}
+
+        <SheetRow>
+          <div className="grid gap-8 sm:grid-cols-2">
+            <div>
+              <SheetHeading level={3}>Way of working</SheetHeading>
+              <p className="whitespace-pre-line text-[0.9375rem] leading-relaxed text-ink">{stageData.stage3.sdlcMapping}</p>
+            </div>
+            <div>
+              <SheetHeading level={3}>Testing and release</SheetHeading>
+              <p className="whitespace-pre-line text-[0.9375rem] leading-relaxed text-ink">{stageData.stage3.qaApproach}</p>
+            </div>
+          </div>
+        </SheetRow>
+
+        <SheetRow
+          margin={
+            <div>
+              <p className="font-hand text-[1.6rem] font-bold leading-none text-marker tabular">{totalFte.toFixed(1)} FTE</p>
+              <p className="mt-2 text-meta text-pencil">
+                {totalFte > 2
+                  ? "More than two people working full time. A student team will need to cut scope or stretch the timeline."
+                  : "Full-time people in total. For a student team, treat this as share of effort."}
+              </p>
+            </div>
+          }
+        >
+          <SheetHeading>Team</SheetHeading>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[34rem] border-collapse text-left text-[0.9375rem]">
+              <thead>
+                <tr className="border-b border-rule">
+                  <th scope="col" className="label-caps py-2 pr-4 font-semibold">Role</th>
+                  <th scope="col" className="label-caps py-2 pr-4 text-right font-semibold">FTE</th>
+                  <th scope="col" className="label-caps py-2 font-semibold">Skills</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stageData.stage3.teamRoles.map((role, index) => (
+                  <tr key={index} className="border-b border-rule align-top last:border-b-0">
+                    <td className="py-3 pr-4">
+                      <p className="font-semibold text-ink">{role.role}</p>
+                      <p className="mt-0.5 text-sm text-ink-soft">{role.description}</p>
+                    </td>
+                    <td className="py-3 pr-4 text-right font-mono text-sm text-ink tabular">{role.fteEstimate}</td>
+                    <td className="py-3">
+                      <div className="flex flex-wrap gap-1.5">
+                        {role.skills.map((skill, idx) => <Chip key={idx}>{skill}</Chip>)}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </SheetRow>
+
+        <SheetRow
+          marginLabel="Next"
+          margin={
+            <ContinueButton
+              to={AnalysisStage.TECH_ROADMAP}
+              label="Continue to tech plan"
+              hint="Next: technology layers, versions, security, and costs."
+            />
+          }
+        >
+          <SheetHeading>Ready for the technical detail?</SheetHeading>
+          <p className="max-w-[60ch] text-[0.9375rem] leading-relaxed text-ink-soft">
+            The tech plan picks the tools for each layer and estimates what the build costs.
+          </p>
+        </SheetRow>
+      </Sheet>
+    )
+  }
+
+  // 🎨 STAGE 4: TECH PLAN
   const renderTechRoadmap = () => {
     if (!analysis || !stageData.stage4) return null
 
     return (
-      <div className="space-y-6">
-        {/* Stage 4: Technology Roadmap */}
-        <Card className="bg-purple-500/5">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-2xl flex items-center gap-2">
-                  <Code className="w-6 h-6 text-purple-500" />
-                  Stage 4: Technology Roadmap & Stack
-                </CardTitle>
-                <CardDescription>
-                  Technical path, readiness advice, and cost analysis
-                </CardDescription>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button variant="ghost" size="sm" onClick={goToPreviousStage}>
-                  Back
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={goBackToInput}
-                  className="flex items-center gap-2"
-                >
-                  <Edit3 className="w-4 h-4" />
-                  Edit Prompt
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={regenerateStage4}
-                  disabled={loading}
-                  className="flex items-center gap-2"
-                >
-                  {loading ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <RefreshCw className="w-4 h-4" />
-                  )}
-                  Regenerate
-                </Button>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Tech Roadmap */}
-            <div className="space-y-4">
-              <h4 className="font-bold text-lg">Layered Technology Roadmap</h4>
-              {stageData.stage4.techRoadmap.map((item, index) => (
-                <div key={index} className="border-l-4 border-purple-500 pl-4 bg-purple-500/10 p-4 rounded-r-lg">
-                  <div className="flex justify-between items-start mb-2">
-                    <h5 className="font-semibold text-purple-600 dark:text-purple-400">{item.category}</h5>
-                    <div className="flex gap-2">
-                      <Badge variant="outline">{item.timeline}</Badge>
-                      <Badge variant="secondary">TRL {item.trl}/9</Badge>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {item.technologies.map((tech, idx) => (
-                      <Badge key={idx} variant="outline" className="text-xs">{tech}</Badge>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
+      <Sheet>
+        <SheetRow marginFirstOnMobile margin={<MarginNote mark={<Query />} title="Readiness, 1 to 9">9 means proven in production; below 7 means you are partly doing research.</MarginNote>}>
+          <h1 className="text-[1.5rem] font-semibold tracking-[-0.02em] text-ink sm:text-[1.75rem]">What to build it with</h1>
+        </SheetRow>
 
-            {/* Version Milestones */}
-            <div className="space-y-4">
-              <h4 className="font-bold text-lg">Version-Based Milestones</h4>
-              {stageData.stage4.versionMilestones.map((version, index) => (
-                <div key={index} className="border rounded p-4 bg-card">
-                  <div className="flex justify-between items-start mb-2">
-                    <h5 className="font-semibold">{version.version}</h5>
-                    <Badge variant="outline">{version.timeline}</Badge>
-                  </div>
-                  <p className="text-sm text-muted-foreground mb-2">{version.description}</p>
-                  <div className="space-y-1">
-                    {version.features.map((feature, idx) => (
-                      <div key={idx} className="text-sm flex items-start gap-2">
-                        <span className="text-purple-500">•</span>
-                        {feature}
+        <SheetRow
+          margin={(() => {
+            const unproven = stageData.stage4.techRoadmap.filter((t) => t.trl < 7).length
+            return unproven > 0 ? (
+              <MarginNote mark={<Cross />} title={`${plural(unproven, "layer")} below 7`}>Budget time for research and a fallback.</MarginNote>
+            ) : (
+              <MarginNote mark={<Tick />} title="All proven">Every layer is established technology.</MarginNote>
+            )
+          })()}
+        >
+          <SheetHeading>Technology layers</SheetHeading>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[34rem] border-collapse text-left text-[0.9375rem]">
+              <thead>
+                <tr className="border-b border-rule">
+                  <th scope="col" className="label-caps py-2 pr-4 font-semibold">Layer</th>
+                  <th scope="col" className="label-caps py-2 pr-4 font-semibold">Technologies</th>
+                  <th scope="col" className="label-caps py-2 pr-4 font-semibold">When</th>
+                  <th scope="col" className="label-caps py-2 text-right font-semibold">Readiness</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stageData.stage4.techRoadmap.map((item, index) => (
+                  <tr key={index} className="border-b border-rule align-top last:border-b-0">
+                    <td className="py-3 pr-4 font-semibold text-ink">{item.category}</td>
+                    <td className="py-3 pr-4">
+                      <div className="flex flex-wrap gap-1.5">
+                        {item.technologies.map((tech, idx) => <Chip key={idx}>{tech}</Chip>)}
                       </div>
+                    </td>
+                    <td className="py-3 pr-4 text-sm text-ink-soft">{item.timeline}</td>
+                    <td className={cn("py-3 text-right font-mono text-sm tabular", item.trl < 7 ? "text-marker" : "text-ink")}>
+                      {item.trl}/9
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </SheetRow>
+
+        <SheetRow
+          margin={
+            <MarginNote mark={<Tick />} title={plural(stageData.stage4.versionMilestones.length, "version")}>
+              Ship the first one before starting the next.
+            </MarginNote>
+          }
+        >
+          <SheetHeading>Versions</SheetHeading>
+          <ol className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {stageData.stage4.versionMilestones.map((version, index) => (
+              <li key={index} className="min-w-0">
+                <p className="flex items-baseline justify-between gap-3">
+                  <span className="font-semibold text-ink">{version.version}</span>
+                  <span className="text-meta text-pencil">{version.timeline}</span>
+                </p>
+                <p className="mt-1 text-sm text-ink-soft">{version.description}</p>
+                <ul className="mt-2 space-y-1 text-sm text-ink">
+                  {version.features.map((feature, idx) => (
+                    <li key={idx} className="flex gap-2"><span className="text-pencil">–</span><span>{feature}</span></li>
+                  ))}
+                </ul>
+              </li>
+            ))}
+          </ol>
+        </SheetRow>
+
+        <SheetRow
+          margin={(() => {
+            const reqs = stageData.stage4.securityConsiderations.reduce((n, c) => n + c.requirements.length, 0)
+            const standards = new Set(stageData.stage4.securityConsiderations.flatMap((c) => c.compliance)).size
+            return (
+              <MarginNote mark={<Cross />} title={plural(reqs, "requirement")}>
+                {standards > 0 ? `${plural(standards, "standard")} to comply with. ` : ""}Easy to postpone, expensive to add later.
+              </MarginNote>
+            )
+          })()}
+        >
+          <SheetHeading>Security and compliance</SheetHeading>
+          <ul className="space-y-5">
+            {stageData.stage4.securityConsiderations.map((security, index) => (
+              <li key={index} className="grid gap-3 sm:grid-cols-[12rem_minmax(0,1fr)]">
+                <p className="font-semibold text-ink">{security.area}</p>
+                <div>
+                  <ul className="space-y-1 text-[0.9375rem] text-ink">
+                    {security.requirements.map((req, idx) => (
+                      <li key={idx} className="flex gap-2"><span className="text-pencil">–</span><span>{req}</span></li>
                     ))}
-                  </div>
+                  </ul>
+                  {security.compliance.length > 0 ? (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {security.compliance.map((c, idx) => <Chip key={idx}>{c}</Chip>)}
+                    </div>
+                  ) : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </SheetRow>
+
+        <SheetRow
+          margin={
+            <div className="space-y-3">
+              {stageData.stage4.costEstimates.map((c, i) => (
+                <div key={i}>
+                  <p className="text-meta text-pencil">{c.category}</p>
+                  <p className="font-hand text-[1.4rem] font-bold leading-tight text-marker tabular">{c.total}</p>
                 </div>
               ))}
             </div>
-
-            {/* Security Considerations */}
-            <div className="space-y-4">
-              <h4 className="font-bold text-lg flex items-center gap-2">
-                <Shield className="w-5 h-5" />
-                Security & Compliance
-              </h4>
-              {stageData.stage4.securityConsiderations.map((security, index) => (
-                <div key={index} className="border rounded p-4 bg-card">
-                  <h5 className="font-semibold mb-2">{security.area}</h5>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <strong className="text-sm">Requirements:</strong>
-                      <ul className="text-sm mt-1">
-                        {security.requirements.map((req, idx) => (
-                          <li key={idx} className="flex items-start gap-2">
-                            <span className="text-red-500">•</span>
-                            {req}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                    <div>
-                      <strong className="text-sm">Compliance:</strong>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {security.compliance.map((comp, idx) => (
-                          <Badge key={idx} variant="outline" className="text-xs">{comp}</Badge>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Cost Estimates */}
-            <div className="space-y-4">
-              <h4 className="font-bold text-lg flex items-center gap-2">
-                <DollarSign className="w-5 h-5" />
-                Financial Cost Analysis
-              </h4>
-              {stageData.stage4.costEstimates.map((category, index) => (
-                <div key={index} className="border rounded p-4 bg-card">
-                  <div className="flex justify-between items-start mb-3">
-                    <h5 className="font-semibold">{category.category}</h5>
-                    <Badge variant="secondary">{category.total}</Badge>
-                  </div>
-                  <div className="space-y-2">
+          }
+        >
+          <SheetHeading>Costs</SheetHeading>
+          <div className="space-y-6">
+            {stageData.stage4.costEstimates.map((category, index) => (
+              <div key={index}>
+                <p className="label-caps">{category.category}</p>
+                <table className="mt-2 w-full border-collapse text-left text-[0.9375rem]">
+                  <tbody>
                     {category.items.map((item, idx) => (
-                      <div key={idx} className="text-sm">
-                        <div className="flex justify-between items-start">
-                          <strong>{item.name}</strong>
-                          <span className="text-muted-foreground">{item.cost}</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground">{item.justification}</p>
-                      </div>
+                      <tr key={idx} className="border-b border-rule align-top last:border-b-0">
+                        <td className="py-2 pr-4">
+                          <p className="font-medium text-ink">{item.name}</p>
+                          <p className="text-sm text-ink-soft">{item.justification}</p>
+                        </td>
+                        <td className="whitespace-nowrap py-2 text-right font-mono text-sm text-ink tabular">{item.cost}</td>
+                      </tr>
                     ))}
-                  </div>
-                </div>
-              ))}
-            </div>
+                  </tbody>
+                </table>
+              </div>
+            ))}
+          </div>
+        </SheetRow>
 
-            {/* CTA */}
-            <div className="text-center pt-4">
-              <Button
-                size="lg"
-                onClick={() => proceedToStage(AnalysisStage.DEEP_RESOURCES)}
-                disabled={loading}
-                className="text-lg px-8 py-4"
-              >
-                {loading ? (
-                  <Loader2 className="mr-2 w-5 h-5 animate-spin" />
-                ) : (
-                  <Briefcase className="mr-2 w-5 h-5" />
-                )}
-                Access Deep Resources & Tools
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+        <SheetRow
+          marginLabel="Next"
+          margin={
+            <ContinueButton
+              to={AnalysisStage.DEEP_RESOURCES}
+              label="Continue to hand-off"
+              hint="Next: export the report and find help."
+            />
+          }
+        >
+          <SheetHeading>Take it with you</SheetHeading>
+          <p className="max-w-[60ch] text-[0.9375rem] leading-relaxed text-ink-soft">
+            The hand-off page collects the report and links to find people who can help build it.
+          </p>
+        </SheetRow>
+      </Sheet>
     )
   }
 
+  // 🎨 STAGE 5: HAND-OFF
   const renderDeepResources = () => {
     if (!analysis || !stageData.stage5) return null
 
     return (
-      <div className="space-y-6">
-        {/* Stage 5: Deep Resources */}
-        <Card className="bg-red-500/5">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-2xl flex items-center gap-2">
-                  <Briefcase className="w-6 h-6 text-red-500" />
-                  Stage 5: Deep Resources & Interactive Tools
-                </CardTitle>
-                <CardDescription>
-                  Practical handoff to execution - Premium features
-                </CardDescription>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button variant="ghost" size="sm" onClick={goToPreviousStage}>
-                  Back
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={goBackToInput}
-                  className="flex items-center gap-2"
-                >
-                  <Edit3 className="w-4 h-4" />
-                  Edit Prompt
-                </Button>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Shareable Report */}
-            <div className="border rounded p-4 bg-card">
-              <h4 className="font-bold text-lg mb-3 flex items-center gap-2">
-                <LinkIcon className="w-5 h-5" />
-                Shareable Idea Report
-              </h4>
-              <p className="text-sm text-muted-foreground mb-3">
-                Get a permanent link to access this analysis from anywhere
-              </p>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={stageData.stage5.shareableLink}
-                  readOnly
-                  className="flex-1 px-3 py-2 border rounded text-sm bg-muted"
-                />
-                <Button
-                  size="sm"
-                  onClick={() => navigator.clipboard.writeText(stageData.stage5?.shareableLink || "")}
-                >
-                  Copy Link
-                </Button>
-              </div>
-            </div>
+      <Sheet>
+        <SheetRow marginFirstOnMobile margin={<MarginNote mark={<Tick />} title="All five pages marked">Export the report to show your supervisor or team.</MarginNote>}>
+          <h1 className="text-[1.5rem] font-semibold tracking-[-0.02em] text-ink sm:text-[1.75rem]">Take it further</h1>
+        </SheetRow>
 
-            {/* Freelancer Links */}
-            <div className="border rounded p-4 bg-card">
-              <h4 className="font-bold text-lg mb-3 flex items-center gap-2">
-                <Users className="w-5 h-5" />
-                Find Expert Developers
-              </h4>
-              <p className="text-sm text-muted-foreground mb-3">
-                Connect with freelance experts in your project domain
-              </p>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {stageData.stage5.freelancerLinks.map((link, index) => (
-                  <div key={index} className="border rounded p-3 text-center bg-card">
-                    <h5 className="font-semibold mb-2">{link.platform}</h5>
-                    <p className="text-xs text-muted-foreground mb-3">{link.description}</p>
-                    <Button size="sm" asChild>
-                      <a href={link.url} target="_blank" rel="noopener noreferrer">
-                        Browse Experts
-                      </a>
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </div>
+        <SheetRow
+          margin={
+            <Button onClick={exportToPDF} disabled={exportLoading} size="lg" className="h-11 w-full justify-between px-4">
+              {exportLoading ? "Preparing report…" : "Export PDF report"}
+              {exportLoading ? <Loader2 className="animate-spin" /> : <Download />}
+            </Button>
+          }
+        >
+          <SheetHeading>The report</SheetHeading>
+          <p className="max-w-[60ch] text-[0.9375rem] leading-relaxed text-ink-soft">
+            A printable copy of the evaluation. It opens in a new tab; use your browser&apos;s print dialog to save it as a PDF.
+          </p>
+        </SheetRow>
 
-            {/* Jira Integration */}
-            <div className="border rounded p-4 bg-card opacity-50">
-              <h4 className="font-bold text-lg mb-3 flex items-center gap-2">
-                <BarChart3 className="w-5 h-5" />
-                Jira Integration
-              </h4>
-              <p className="text-sm text-muted-foreground mb-3">
-                Connect directly with Jira to work on pre-built roadmap
-              </p>
-              <Button disabled size="sm">
-                Coming Soon - Connect to Jira
-              </Button>
-            </div>
+        <SheetRow>
+          <SheetHeading>Find people to build it</SheetHeading>
+          <ul className="grid gap-x-8 gap-y-4 sm:grid-cols-3">
+            {stageData.stage5.freelancerLinks.map((link, index) => (
+              <li key={index}>
+                <LinkTitle href={link.url}>{link.platform}</LinkTitle>
+                <p className="mt-1 text-sm text-ink-soft">{link.description}</p>
+              </li>
+            ))}
+          </ul>
+        </SheetRow>
 
-            {/* SRS Document Generator */}
-            <div className="border rounded p-4 bg-card opacity-50">
-              <h4 className="font-bold text-lg mb-3 flex items-center gap-2">
-                <FileText className="w-5 h-5" />
-                AI-Generated SRS Document
-              </h4>
-              <p className="text-sm text-muted-foreground mb-3">
-                Generate an IEEE standard Software Requirements Specification
-              </p>
-              <Button disabled size="sm">
-                Coming Soon - Generate SRS
-              </Button>
-            </div>
-
-            {/* Export Options */}
-            <div className="border rounded p-4 bg-card">
-              <h4 className="font-bold text-lg mb-3 flex items-center gap-2">
-                <Download className="w-5 h-5" />
-                Export Complete Analysis
-              </h4>
-              <div className="flex gap-2">
-                <Button
-                  onClick={exportToPDF}
-                  disabled={exportLoading}
-                  className="flex items-center gap-2"
-                >
-                  {exportLoading ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Download className="w-4 h-4" />
-                  )}
-                  Download PDF Report
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+        <SheetRow margin={<MarginNote title="Not available yet">These need saved reports and accounts, which are on the roadmap.</MarginNote>}>
+          <SheetHeading>Coming later</SheetHeading>
+          <ul className="divide-y divide-rule">
+            {[
+              { icon: LinkIcon, title: "Shareable report link", text: "A permanent link to this evaluation." },
+              { icon: FileText, title: "Requirements document (SRS)", text: "An IEEE-style software requirements specification." },
+              { icon: BarChart3, title: "Jira export", text: "Milestones and deliverables as Jira issues." },
+            ].map(({ icon: Icon, title, text }) => (
+              <li key={title} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0 text-pencil">
+                <Icon className="mt-0.5 size-4 shrink-0" aria-hidden />
+                <div>
+                  <p className="font-medium text-ink-soft">{title}</p>
+                  <p className="text-sm">{text}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </SheetRow>
+      </Sheet>
     )
   }
 
@@ -2395,134 +2347,207 @@ export default function AnalysisPage() {
     ]
   }
 
+  const stageLabels: Record<number, string> = {
+    1: "Snapshot",
+    2: "Summary",
+    3: "Roadmap",
+    4: "Tech plan",
+    5: "Hand-off",
+  }
+
+  const stageHasData = (n: number) => {
+    if (n === AnalysisStage.QUICK_SNAPSHOT) return !!analysis
+    if (n === AnalysisStage.EXECUTIVE_SUMMARY) return !!stageData.stage2
+    if (n === AnalysisStage.ROADMAPS) return !!stageData.stage3
+    if (n === AnalysisStage.TECH_ROADMAP) return !!stageData.stage4
+    if (n === AnalysisStage.DEEP_RESOURCES) return !!stageData.stage5
+    return false
+  }
+
+  const stageTabs: StageTab[] = [1, 2, 3, 4, 5].map((n) => ({
+    id: n,
+    label: stageLabels[n],
+    state:
+      n === currentStage
+        ? "current"
+        : stageHasData(n)
+          ? "marked"
+          : n === currentStage + 1 && !loading
+            ? "open"
+            : "locked",
+  }))
+
+  const selectStage = (n: number) => {
+    if (stageHasData(n)) {
+      setCurrentStage(n as AnalysisStage)
+      localStorage.setItem("currentStage", n.toString())
+    } else if (n === currentStage + 1) {
+      proceedToStage(n as AnalysisStage)
+    }
+  }
+
+  const regenerateCurrent: Partial<Record<AnalysisStage, () => void>> = {
+    [AnalysisStage.QUICK_SNAPSHOT]: regenerateStage1,
+    [AnalysisStage.EXECUTIVE_SUMMARY]: regenerateStage2,
+    [AnalysisStage.ROADMAPS]: regenerateStage3,
+    [AnalysisStage.TECH_ROADMAP]: regenerateStage4,
+  }
+  const regenerate = regenerateCurrent[currentStage]
+
+  // A stage whose data is missing (e.g. after a page refresh) gets a clear way back.
+  const renderMissingStage = () => (
+    <Sheet>
+      <SheetRow
+        divider={false}
+        margin={
+          <Button onClick={() => proceedToStage(currentStage)} disabled={loading || !analysis} className="w-full justify-between">
+            {loading ? "Marking…" : "Load this page"}
+            {loading ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+          </Button>
+        }
+      >
+        <SheetHeading>{stageLabels[currentStage] ?? "This page"} isn&apos;t loaded</SheetHeading>
+        <p className="max-w-[60ch] text-[0.9375rem] text-ink-soft">
+          Only the snapshot is kept when the page reloads. Load this page again, or go back to the snapshot.
+        </p>
+        <Button variant="outline" className="mt-4" onClick={() => selectStage(AnalysisStage.QUICK_SNAPSHOT)} disabled={!analysis}>
+          Back to snapshot
+        </Button>
+      </SheetRow>
+    </Sheet>
+  )
+
   return (
     <SelectionTooltip>
       <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <Link href="/" className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                <Brain className="w-5 h-5 text-primary-foreground" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-foreground">The Idea Evaluator</h1>
-                <p className="text-sm text-muted-foreground">AI-powered project validation</p>
-              </div>
-            </Link>
-            
-            {analysis && (
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => setShowRefinementTools(!showRefinementTools)}
-                  className="flex items-center gap-2"
-                >
-                  <Edit3 className="w-4 h-4" />
-                  Refine Project
-                </Button>
-                <ThemeToggle />
-                <Button
-                  variant="outline"
-                  onClick={exportToPDF}
-                  disabled={exportLoading}
-                  className="flex items-center gap-2 bg-transparent"
-                >
-                  {exportLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                  Export PDF
-                </Button>
-                <Button
-                  variant="default"
-                  onClick={openAssistant}
-                  className="flex items-center gap-2"
-                >
-                  <MessageCircle className="w-4 h-4" />
-                  AI Assistant
-                </Button>
-              </div>
-            )}
-          </div>
-        </div>
-      </header>
+        <AppBar
+          wide
+          actions={
+            <>
+              {analysis ? (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowRefinementTools(!showRefinementTools)}
+                    aria-expanded={showRefinementTools}
+                    className="hidden sm:inline-flex"
+                  >
+                    <PenLine /> Refine idea
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={exportToPDF} disabled={exportLoading} className="hidden sm:inline-flex">
+                    {exportLoading ? <Loader2 className="animate-spin" /> : <Download />}
+                    Export
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={openAssistant}>
+                    <MessageCircle /> Ask
+                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="size-8 sm:hidden" aria-label="More actions">
+                        <MoreHorizontal />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="min-w-[11rem] rounded-md border-rule bg-sheet shadow-lift">
+                      <DropdownMenuItem onSelect={() => setShowRefinementTools(true)}>
+                        <PenLine /> Refine idea
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => exportToPDF()} disabled={exportLoading}>
+                        <Download /> Export report
+                      </DropdownMenuItem>
+                      {currentStage !== AnalysisStage.INPUT ? (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onSelect={goBackToInput}>
+                            <Edit3 /> Edit idea
+                          </DropdownMenuItem>
+                          {regenerate ? (
+                            <DropdownMenuItem onSelect={() => regenerate()} disabled={loading}>
+                              <RefreshCw /> Mark again
+                            </DropdownMenuItem>
+                          ) : null}
+                        </>
+                      ) : null}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </>
+              ) : null}
+              <ThemeToggle />
+            </>
+          }
+        />
 
-      {/* Refinement Tools Panel */}
-      {showRefinementTools && analysis && (
-        <div className="container mx-auto px-4 py-4">
-          <Card className="max-w-4xl mx-auto bg-blue-500/5 border-blue-500/30">
-            <CardHeader>
-              <CardTitle className="text-xl flex items-center gap-2">
-                <Edit3 className="w-5 h-5 text-blue-500" />
-                Refine Your Project Description
-              </CardTitle>
-              <CardDescription>
-                Edit the title or description to get an updated analysis
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="refine-title">Project Title</Label>
-                <Input
-                  id="refine-title"
-                  value={projectModifications.title}
-                  onChange={(e) => setProjectModifications(prev => ({ ...prev, title: e.target.value }))}
-                  placeholder="Project title..."
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="refine-description">Project Description</Label>
-                <Textarea
-                  id="refine-description"
-                  value={projectModifications.description}
-                  onChange={(e) => setProjectModifications(prev => ({ ...prev, description: e.target.value }))}
-                  placeholder="Describe your project..."
-                  className="min-h-24"
-                />
-              </div>
-              <div className="flex gap-3">
-                <Button
-                  onClick={reAnalyzeProject}
-                  disabled={refinementLoading || !projectModifications.description.trim()}
-                  className="flex items-center gap-2"
-                >
-                  {refinementLoading ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <RefreshCw className="w-4 h-4" />
-                  )}
-                  Re-analyze
+        {analysis && currentStage !== AnalysisStage.INPUT ? (
+          <div className="sticky top-14 z-30 border-b border-rule bg-background">
+            <div className="mx-auto flex max-w-[88rem] items-center gap-3 px-4 sm:px-6">
+              <StageTabs stages={stageTabs} onSelect={selectStage} className="min-w-0 flex-1" />
+              <div className="hidden shrink-0 items-center gap-0.5 sm:flex md:gap-1">
+                <Button variant="ghost" size="sm" onClick={goBackToInput} aria-label="Edit idea">
+                  <Edit3 /> <span className="hidden md:inline">Edit idea</span>
                 </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => setShowRefinementTools(false)}
-                  disabled={refinementLoading}
-                >
-                  Cancel
-                </Button>
+                {regenerate ? (
+                  <Button variant="ghost" size="sm" onClick={regenerate} disabled={loading} aria-label="Mark again">
+                    {loading ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+                    <span className="hidden md:inline">Mark again</span>
+                  </Button>
+                ) : null}
               </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      <div className="container mx-auto px-4 py-8">
-        <div className="max-w-4xl mx-auto space-y-8">
-          {/* Analyzing State */}
-          {analyzing && (
-            <div className="transition-all duration-700 ease-in-out">
-              <Card className="p-6 shadow-lg">
-                <ShimmerLoader />
-              </Card>
             </div>
-          )}
+          </div>
+        ) : null}
 
-          {/* Stage Content */}
-          {!analyzing && renderStageContent()}
-        </div>
+        <main className="mx-auto max-w-[88rem] px-4 py-6 sm:px-6 sm:py-10">
+          {showRefinementTools && analysis ? (
+            <Sheet className="mb-6">
+              <SheetRow
+                divider={false}
+                margin={
+                  <div className="space-y-2">
+                    <Button
+                      onClick={reAnalyzeProject}
+                      disabled={refinementLoading || !projectModifications.description.trim()}
+                      className="w-full justify-between"
+                    >
+                      {refinementLoading ? "Marking again…" : "Mark the new version"}
+                      {refinementLoading ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+                    </Button>
+                    <Button variant="ghost" className="w-full" onClick={() => setShowRefinementTools(false)} disabled={refinementLoading}>
+                      Cancel
+                    </Button>
+                  </div>
+                }
+              >
+                <SheetHeading>Refine your idea</SheetHeading>
+                <div className="space-y-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="refine-title" className="text-meta font-medium text-ink-soft">Title</Label>
+                    <Input
+                      id="refine-title"
+                      value={projectModifications.title}
+                      onChange={(e) => setProjectModifications(prev => ({ ...prev, title: e.target.value }))}
+                      placeholder="Project title"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="refine-description" className="text-meta font-medium text-ink-soft">Description</Label>
+                    <Textarea
+                      id="refine-description"
+                      value={projectModifications.description}
+                      onChange={(e) => setProjectModifications(prev => ({ ...prev, description: e.target.value }))}
+                      placeholder="Describe the changed idea"
+                      className="min-h-28"
+                    />
+                  </div>
+                </div>
+              </SheetRow>
+            </Sheet>
+          ) : null}
+
+          <div key={`${currentStage}-${analyzing}`} className="animate-ink-in">
+            {analyzing ? renderMarking() : (renderStageContent() ?? renderMissingStage())}
+          </div>
+        </main>
       </div>
-
-      {/* AI Assistant Chat */}
-    </div>
     </SelectionTooltip>
   )
 }

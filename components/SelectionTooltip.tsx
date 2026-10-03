@@ -1,8 +1,7 @@
 "use client"
 
 import React, { useState, useEffect, useRef } from 'react'
-import { Button } from '@/components/ui/button'
-import { MessageCircle, Sparkles } from 'lucide-react'
+import { MessageCircle } from 'lucide-react'
 import { useAIAssistant } from '@/contexts/AIAssistantContext'
 
 interface SelectionTooltipProps {
@@ -110,29 +109,14 @@ export const SelectionTooltip: React.FC<SelectionTooltipProps> = ({
             transform: 'translateX(-50%)',
           }}
         >
-          <div className="bg-background border border-border shadow-lg rounded-lg p-2 backdrop-blur-sm bg-background/95 max-w-[280px]">
-            <Button
-              onClick={handleAskAI}
-              size="sm"
-              className="h-8 px-3 gap-2 text-xs font-medium"
-              variant="default"
-            >
-              <Sparkles className="w-3 h-3" />
-              Ask AI Assistant
-            </Button>
-          </div>
-          
-          {/* Arrow pointing down */}
-          <div 
-            className="absolute top-full left-1/2 transform -translate-x-1/2"
-            style={{ 
-              width: 0, 
-              height: 0, 
-              borderLeft: '6px solid transparent',
-              borderRight: '6px solid transparent',
-              borderTop: '6px solid hsl(var(--border))'
-            }}
-          />
+          <button
+            type="button"
+            onClick={handleAskAI}
+            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-ink px-3 text-xs font-semibold text-sheet shadow-lift transition-colors hover:bg-ink/90"
+          >
+            <MessageCircle className="size-3.5" aria-hidden />
+            Ask about this
+          </button>
         </div>
       )}
     </>

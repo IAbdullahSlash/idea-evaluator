@@ -1,83 +1,40 @@
-import { Brain, Github, Twitter, Linkedin } from "lucide-react"
+import Link from "next/link"
+import { Github, Linkedin } from "lucide-react"
+import { Wordmark } from "@/components/script/marks"
+
+const makers = [
+  {
+    name: "Abdullah Azmi",
+    github: "https://github.com/IAbdullahSlash",
+    linkedin: "https://www.linkedin.com/in/abdullah-azmi-492120359/",
+  },
+  {
+    name: "Darakhshan Ifraque",
+    github: "https://github.com/Darakhshan-dev",
+    linkedin: "https://www.linkedin.com/in/darakhshan-ifraque-6287a1320/",
+  },
+]
 
 export function Footer() {
   return (
-    <footer className="bg-muted/30 border-t border-border">
-      <div className="container mx-auto px-4 py-12">
-        {/* Brand */}
-        <div className="text-center space-y-4 mb-8">
-          <a href="/" className="flex items-center justify-center space-x-2">
-            <Brain className="h-8 w-8 text-primary" />
-            <span className="font-bold text-xl">The Idea Evaluator</span>
-          </a>
-
-        </div>
-
-        <div className="text-center text-sm text-muted-foreground">
-          <div className="space-y-4">
-            <p className="font-semibold">Made By:</p>
-            <div className="flex justify-center items-center space-x-3">
-              <span className="text-muted-foreground">Abdullah</span>
-              <a 
-                href="https://twitter.com/contributor1" 
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-muted-foreground hover:text-[#1DA1F2] transition-colors"
-                aria-label="Abdullah Twitter"
-              >
-                <Twitter className="h-4 w-4" />
+    <footer className="border-t border-rule">
+      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-10 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <Link href="/" className="w-fit rounded-sm">
+          <Wordmark compact />
+        </Link>
+        <ul className="flex flex-col gap-3 text-sm text-ink-soft sm:flex-row sm:gap-8">
+          {makers.map((m) => (
+            <li key={m.name} className="flex items-center gap-3">
+              <span>{m.name}</span>
+              <a href={m.github} target="_blank" rel="noopener noreferrer" aria-label={`${m.name} on GitHub`} className="rounded-sm text-pencil transition-colors hover:text-ink">
+                <Github className="size-4" />
               </a>
-              <a 
-                href="https://github.com/IAbdullahSlash" 
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-muted-foreground hover:text-foreground transition-colors"
-                aria-label="Abdullah GitHub"
-              >
-                <Github className="h-4 w-4" />
+              <a href={m.linkedin} target="_blank" rel="noopener noreferrer" aria-label={`${m.name} on LinkedIn`} className="rounded-sm text-pencil transition-colors hover:text-ink">
+                <Linkedin className="size-4" />
               </a>
-              <a 
-                href="https://www.linkedin.com/in/abdullah-azmi-492120359/" 
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-muted-foreground hover:text-[#0A66C2] transition-colors"
-                aria-label="Abdullah LinkedIn"
-              >
-                <Linkedin className="h-4 w-4" />
-              </a>
-            </div>
-            <div className="flex justify-center items-center space-x-3">
-              <span className="text-muted-foreground">Darakhshan</span>
-              <a 
-                href="https://twitter.com/contributor2" 
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-muted-foreground hover:text-[#1DA1F2] transition-colors"
-                aria-label="Darakhshan Twitter"
-              >
-                <Twitter className="h-4 w-4" />
-              </a>
-              <a 
-                href="https://github.com/Darakhshan-dev" 
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-muted-foreground hover:text-foreground transition-colors"
-                aria-label="Darakhshan GitHub"
-              >
-                <Github className="h-4 w-4" />
-              </a>
-              <a 
-                href="https://www.linkedin.com/in/darakhshan-ifraque-6287a1320/" 
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-muted-foreground hover:text-[#0A66C2] transition-colors"
-                aria-label="Darakhshan LinkedIn"
-              >
-                <Linkedin className="h-4 w-4" />
-              </a>
-            </div>
-          </div>
-        </div>
+            </li>
+          ))}
+        </ul>
       </div>
     </footer>
   )

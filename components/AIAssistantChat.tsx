@@ -2,16 +2,14 @@
 
 import * as React from "react"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
+import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { MessageCircle, X, Send, Loader2, Bot, User, Square } from "lucide-react"
+import { X, Send, Square } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAIAssistant } from "@/contexts/AIAssistantContext"
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
+import { Markdown } from "@/components/script/markdown"
 import rehypeHighlight from 'rehype-highlight'
 import rehypeRaw from 'rehype-raw'
-import 'highlight.js/styles/github-dark.css' // Choose your preferred theme
 
 interface Message {
   id: string
@@ -197,261 +195,121 @@ React.useEffect(() => {
     }
   }
 
+  const renderAnswer = (content: string) => (
+    <Markdown className="text-[0.9375rem]" rehypePlugins={[rehypeHighlight, rehypeRaw]}>
+      {content}
+    </Markdown>
+  )
+
   return (
     <>
       {/* Overlay */}
       {isOpen && (
         <div
-          className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40 transition-opacity"
+          className="fixed inset-0 z-40 bg-ink/25 transition-opacity"
           onClick={closeAssistant}
+          aria-hidden
         />
       )}
 
-      {/* Chat Panel */}
+      {/* Panel: a tutor's sheet slid in from the right, its margin rule on the left */}
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Project assistant"
+        aria-hidden={!isOpen}
         className={cn(
-          "fixed top-0 right-0 h-full w-full md:w-[500px] bg-background border-l shadow-2xl z-50 transform transition-transform duration-300 ease-in-out",
-          isOpen ? "translate-x-0" : "translate-x-full"
+          "fixed right-0 top-0 z-50 h-full w-full bg-sheet shadow-lift transition-transform duration-500 ease-out-expo md:w-[30rem]",
+          isOpen ? "visible translate-x-0" : "pointer-events-none invisible translate-x-full"
         )}
       >
-        <div className="flex flex-col h-full">
+        <div aria-hidden className="absolute inset-y-0 left-0 w-[5px] border-x border-marker/80" />
+        <div className="flex h-full flex-col pl-[5px]">
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-border bg-card/50 backdrop-blur-sm">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                <Bot className="w-5 h-5 text-primary" />
-              </div>
-              <div>
-                <h2 className="font-semibold text-lg">AI Instructor</h2>
-                <p className="text-xs text-muted-foreground">
-                  Ask me anything about your project
-                </p>
-              </div>
+          <div className="flex items-center justify-between border-b border-rule px-5 py-4">
+            <div>
+              <h2 className="text-base font-semibold text-ink">Ask about your project</h2>
+              <p className="text-meta text-pencil">
+                {projectContext ? "Answers use your evaluation as context." : "General project advice."}
+              </p>
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={closeAssistant}
-              className="rounded-full"
-            >
-              <X className="w-5 h-5" />
+            <Button variant="ghost" size="icon" onClick={closeAssistant} aria-label="Close assistant" className="size-8">
+              <X />
             </Button>
           </div>
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-4" ref={scrollRef}>
-            <div className="space-y-4">
+          <div className="flex-1 overflow-y-auto px-5 py-5" ref={scrollRef}>
+            <ol className="space-y-5">
               {messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={cn(
-                    "flex gap-3",
-                    message.role === "user" ? "justify-end" : "justify-start"
-                  )}
-                >
-                  {message.role === "assistant" && (
-                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                      <Bot className="w-4 h-4 text-primary" />
+                <li key={message.id} className={cn("flex", message.role === "user" ? "justify-end" : "justify-start")}>
+                  {message.role === "assistant" ? (
+                    <div className="min-w-0 max-w-full border-l border-marker/70 pl-4">
+                      {renderAnswer(message.content)}
                     </div>
+                  ) : (
+                    <p className="max-w-[85%] whitespace-pre-wrap rounded-md bg-muted px-3.5 py-2.5 text-[0.9375rem] leading-relaxed text-ink">
+                      {message.content}
+                    </p>
                   )}
-                  <div
-                    className={cn(
-                      "rounded-lg px-4 py-2 max-w-[80%]",
-                      message.role === "user"
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted"
-                    )}
-                  >
-                    {/* Replace this plain text with ReactMarkdown */}
-                    {message.role === "assistant" ? (
-                      <div className="prose prose-sm dark:prose-invert max-w-none">
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm]}
-                          rehypePlugins={[rehypeHighlight, rehypeRaw]}
-                          components={{
-                          h1: ({ children }) => (
-                            <h1 className="text-xl font-bold mb-3 text-foreground">
-                              {children}
-                            </h1>
-                          ),
-                          h2: ({ children }) => (
-                            <h2 className="text-lg font-semibold mb-2 mt-4 text-foreground">
-                              {children}
-                            </h2>
-                          ),
-                          h3: ({ children }) => (
-                            <h3 className="text-md font-medium mb-2 mt-3 text-foreground">
-                              {children}
-                            </h3>
-                          ),
-                          code: ({ node, inline, className, children, ...props }: any) => (
-                            inline ? (
-                              <code className="bg-primary/20 px-1 py-0.5 rounded text-sm font-mono text-primary">
-                                {children}
-                              </code>
-                            ) : (
-                              <code {...props} className="block bg-secondary p-3 rounded-md overflow-x-auto text-sm">
-                                {children}
-                              </code>
-                            )
-                          ),
-                          blockquote: ({ children }) => (
-                            <blockquote className="border-l-4 border-primary pl-4 italic bg-primary/5 py-2 my-3">
-                              {children}
-                            </blockquote>
-                          ),
-                          ul: ({ children }) => (
-                            <ul className="list-disc list-inside space-y-1 mb-3">
-                              {children}
-                            </ul>
-                          ),
-                          ol: ({ children }) => (
-                            <ol className="list-decimal list-inside space-y-1 mb-3">
-                              {children}
-                            </ol>
-                          ),
-                          li: ({ children }) => (
-                            <li className="text-foreground">
-                              {children}
-                            </li>
-                          ),
-                          strong: ({ children }) => (
-                            <strong className="font-semibold text-foreground">
-                              {children}
-                            </strong>
-                          ),
-                          p: ({ children }) => (
-                            <p className="mb-3 text-foreground leading-relaxed">
-                              {children}
-                            </p>
-                          ),
-                          hr: () => (
-                            <hr className="my-4 border-border" />
-                          )
-                        }}
-                        >
-                          {message.content}
-                        </ReactMarkdown>
-                      </div>
-                    ) : (
-                      <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                    )}
-                  </div>
-                  {message.role === "user" && (
-                    <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center flex-shrink-0">
-                      <User className="w-4 h-4" />
-                    </div>
-                  )}
-                </div>
+                </li>
               ))}
               {isThinking && (
-                <div className="flex gap-3 justify-start">
-                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                    <Bot className="w-4 h-4 text-primary" />
-                  </div>
-                  <div className="bg-muted rounded-lg px-4 py-2">
-                    <p className="text-sm text-muted-foreground italic">Thinking...</p>
-                  </div>
-                </div>
+                <li className="border-l border-marker/70 pl-4">
+                  <p className="font-hand text-lg text-marker">Thinking…</p>
+                </li>
               )}
               {streamingMessage && (
-                <div className="flex gap-3 justify-start">
-                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                    <Bot className="w-4 h-4 text-primary" />
-                  </div>
-                  <div className="bg-muted rounded-lg px-4 py-2 max-w-[80%]">
-                    <div className="prose prose-sm dark:prose-invert max-w-none">
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        rehypePlugins={[rehypeHighlight, rehypeRaw]}
-                        components={{
-                        // Same styling components as above
-                        h2: ({ children }) => (
-                          <h2 className="text-lg font-semibold mb-2 mt-4 text-foreground">
-                            {children}
-                          </h2>
-                        ),
-                        h3: ({ children }) => (
-                          <h3 className="text-md font-medium mb-2 mt-3 text-foreground">
-                            {children}
-                          </h3>
-                        ),
-                        strong: ({ children }) => (
-                          <strong className="font-semibold text-foreground">
-                            {children}
-                          </strong>
-                        ),
-                        p: ({ children }) => (
-                          <p className="mb-3 text-foreground leading-relaxed">
-                            {children}
-                          </p>
-                        ),
-                        ul: ({ children }) => (
-                          <ul className="list-disc list-inside space-y-1 mb-3">
-                            {children}
-                          </ul>
-                        ),
-                        li: ({ children }) => (
-                          <li className="text-foreground">
-                            {children}
-                          </li>
-                        ),
-                      }}
-                      >
-                        {streamingMessage}
-                      </ReactMarkdown>
-                    </div>
-                  </div>
-                </div>
+                <li className="min-w-0 border-l border-marker/70 pl-4">{renderAnswer(streamingMessage)}</li>
               )}
-            </div>
+            </ol>
           </div>
 
           {/* Suggested Questions */}
           {messages.length <= 1 && (
-            <div className="p-4 border-t bg-muted/30">
-              <p className="text-sm text-muted-foreground mb-3">
-                Some questions you might have about this project:
-              </p>
-              <div className="space-y-2">
+            <div className="border-t border-rule px-5 py-4">
+              <p className="label-caps mb-2">Try asking</p>
+              <ul className="divide-y divide-rule">
                 {suggestedQuestions.map((question, index) => (
-                  <button
-                    key={index}
-                    onClick={() => handleSuggestedQuestion(question)}
-                    className="w-full text-left text-sm p-3 rounded-lg bg-background hover:bg-accent transition-colors border border-border"
-                  >
-                    {question}
-                  </button>
+                  <li key={index}>
+                    <button
+                      type="button"
+                      onClick={() => handleSuggestedQuestion(question)}
+                      className="w-full py-2.5 text-left text-sm text-ink-soft transition-colors hover:text-ink"
+                    >
+                      {question}
+                    </button>
+                  </li>
                 ))}
-              </div>
+              </ul>
             </div>
           )}
 
           {/* Input */}
-          <div className="p-4 border-t border-border bg-card/50 backdrop-blur-sm">
-            <div className="flex gap-2">
+          <div className="border-t border-rule px-5 py-4">
+            <div className="flex items-end gap-2">
+              <Label htmlFor="assistant-input" className="sr-only">Your question</Label>
               <Textarea
+                id="assistant-input"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask AI anything about your project..."
-                className="min-h-[60px] max-h-[120px] resize-none"
+                placeholder="Ask anything about your project…"
+                className="max-h-[120px] min-h-[52px] resize-none"
                 disabled={isLoading}
               />
               <Button
                 onClick={isLoading ? stopGeneration : handleSendMessage}
                 disabled={!isLoading && !input.trim()}
                 size="icon"
-                className="h-[60px] w-[60px] flex-shrink-0"
-                variant={isLoading ? "destructive" : "default"}
+                className="size-[52px] shrink-0"
+                variant={isLoading ? "outline" : "default"}
+                aria-label={isLoading ? "Stop" : "Send"}
               >
-                {isLoading ? (
-                  <Square className="w-5 h-5" />
-                ) : (
-                  <Send className="w-5 h-5" />
-                )}
+                {isLoading ? <Square /> : <Send />}
               </Button>
             </div>
+            <p className="mt-2 text-meta text-pencil">Enter to send, Shift+Enter for a new line.</p>
           </div>
         </div>
       </div>

@@ -32,3 +32,12 @@ integrated-nextjs/
 
 # Local task files
 task.txt
+
+# claude
+.claude/
+.impeccable/
+DESIGN.md
+PRODUCT.md
+
+# Docs
+docs/

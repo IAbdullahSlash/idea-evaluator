@@ -3,13 +3,14 @@
 import type React from "react"
 
 import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Label } from "@/components/ui/label"
-import { Brain, ArrowRight } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { ArrowRight } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Sheet } from "@/components/script/sheet"
+import { Wordmark } from "@/components/script/marks"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
@@ -23,73 +24,34 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background dark flex items-center justify-center p-4">
-      <div className="w-full max-w-md space-y-8">
-        {/* Header */}
-        <div className="text-center">
-          <Link href="/" className="inline-flex items-center gap-3 mb-8">
-            <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
-              <Brain className="w-6 h-6 text-primary-foreground" />
-            </div>
-            <div className="text-left">
-              <h1 className="text-xl font-bold text-foreground">The Idea Evaluator</h1>
-              <p className="text-sm text-muted-foreground">AI-powered project validation</p>
-            </div>
-          </Link>
-        </div>
+    <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
+      <Link href="/" className="mb-8 rounded-sm">
+        <Wordmark />
+      </Link>
 
-        {/* Login Form */}
-        <Card className="shadow-2xl border-2">
-          <CardHeader className="text-center">
-            <CardTitle className="text-2xl">Sign In</CardTitle>
-            <CardDescription>Access your AI-powered project analysis</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="your@email.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
-              </div>
-              <Button type="submit" size="lg" className="w-full text-lg py-6">
-                Continue to Analysis <ArrowRight className="ml-2 w-5 h-5" />
-              </Button>
-            </form>
+      <Sheet className="w-full max-w-sm">
+        <form onSubmit={handleLogin} className="space-y-5 p-6 sm:p-8">
+          <div>
+            <h1 className="text-[1.5rem] font-semibold tracking-[-0.02em] text-ink">Sign in</h1>
+            <p className="mt-1 text-sm text-ink-soft">Accounts aren&apos;t available yet. You can evaluate an idea without one.</p>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="email" className="text-meta font-medium text-ink-soft">Email</Label>
+            <Input id="email" type="email" autoComplete="email" placeholder="you@university.edu" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="password" className="text-meta font-medium text-ink-soft">Password</Label>
+            <Input id="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+          </div>
+          <Button type="submit" size="lg" className="h-11 w-full justify-between px-4">
+            Continue <ArrowRight />
+          </Button>
+        </form>
+      </Sheet>
 
-            <div className="mt-6 text-center">
-              <p className="text-sm text-muted-foreground">
-                Don't have an account?{" "}
-                <Link href="#" className="text-primary hover:underline">
-                  Sign up
-                </Link>
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <div className="text-center">
-          <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">
-            ← Back to home
-          </Link>
-        </div>
-      </div>
+      <Link href="/analysis" className="mt-6 text-sm font-medium text-ink-soft underline decoration-rule hover:text-ink hover:decoration-marker">
+        Evaluate an idea without signing in
+      </Link>
     </div>
   )
 }

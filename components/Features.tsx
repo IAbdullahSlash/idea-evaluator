@@ -1,114 +1,65 @@
-import { 
-  Brain, 
-  Clock, 
-  Code, 
-  Target, 
-  Users, 
-  TrendingUp,
-  Shield,
-  Zap,
-  CheckCircle
-} from "lucide-react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { SelectionTooltip } from "@/components/SelectionTooltip"
+import { Cross, Query, Tick } from "@/components/script/marks"
+import { MarginNote, Sheet, SheetRow } from "@/components/script/sheet"
 
-const features = [
-  {
-    icon: Brain,
-    title: "AI-Powered Analysis",
-    description: "Advanced AI evaluates your idea across multiple dimensions including technical feasibility, market potential, and risk assessment.",
-    color: "text-purple-500"
-  },
-  {
-    icon: Clock,
-    title: "Realistic Timeline Estimation",
-    description: "Get conservative, buffer-included timelines that account for learning curves, testing, and real-world development challenges.",
-    color: "text-blue-500"
-  },
-  {
-    icon: Code,
-    title: "Smart Tech Stack Recommendations",
-    description: "Receive curated technology suggestions based on your project complexity, scalability needs, and development experience.",
-    color: "text-green-500"
-  },
-  {
-    icon: Target,
-    title: "Honest Reality Check",
-    description: "Brutally honest feedback on market competition, uniqueness, and whether your idea solves a real problem worth solving.",
-    color: "text-red-500"
-  },
-  {
-    icon: Users,
-    title: "Market Fit Analysis",
-    description: "Understand your target users, validate market demand, and get strategies for user validation and adoption.",
-    color: "text-orange-500"
-  },
-  {
-    icon: TrendingUp,
-    title: "Success Probability Scoring",
-    description: "Data-driven success probability based on market saturation, technical complexity, and execution challenges.",
-    color: "text-pink-500"
-  },
-  {
-    icon: Shield,
-    title: "Risk Assessment",
-    description: "Identify technical, usability, and market risks before you invest time and resources in development.",
-    color: "text-indigo-500"
-  },
-  {
-    icon: Zap,
-    title: "Interactive Roadmap",
-    description: "Get a detailed, phase-by-phase development roadmap with trackable tasks and progress indicators.",
-    color: "text-yellow-500"
-  },
-  {
-    icon: CheckCircle,
-    title: "Actionable Recommendations",
-    description: "Receive specific, actionable advice on risk mitigation, feature prioritization, and success optimization.",
-    color: "text-cyan-500"
-  }
+/*
+ * The marking scheme: the questions every idea is marked against,
+ * taken from the product's own evaluation notes.
+ */
+const criteria = [
+  { name: "A real problem", asks: "Does it solve a clear problem that someone actually has?", fails: "Nobody you ask recognises the problem." },
+  { name: "Worth solving", asks: "Is the pain big enough that people would change what they do today?", fails: "People shrug and keep their workaround." },
+  { name: "Already done", asks: "Is it a common project, or does something like it already exist?", fails: "A free tool already does it well." },
+  { name: "Something new", asks: "What does it do that the alternatives don't?", fails: "You can't name one difference." },
+  { name: "Within reach", asks: "Can you build it with your skills and time, or does it need an expert?", fails: "The core part needs research you haven't done." },
+  { name: "Someone wants it", asks: "Who are the users, and is there demand for it?", fails: "The only user you can name is you." },
 ]
 
 export function Features() {
   return (
-    <SelectionTooltip>
-      <section className="py-20 bg-muted/30">
-      <div className="container mx-auto px-4">
-        <div className="text-center space-y-4 mb-16">
-          <h2 className="text-3xl font-bold tracking-tight sm:text-4xl lg:text-5xl">
-            Comprehensive Project Analysis
-          </h2>
-          <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-            Our AI doesn't just tell you if your idea is good – it provides deep insights 
-            into every aspect of your project's potential success.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {features.map((feature, index) => {
-            const Icon = feature.icon
-            return (
-              <Card 
-                key={index} 
-                className="card-hover border-0 bg-background/50 backdrop-blur-sm"
-              >
-                <CardHeader>
-                  <div className={`w-12 h-12 rounded-lg bg-background flex items-center justify-center mb-4 ${feature.color}`}>
-                    <Icon className="w-6 h-6" />
-                  </div>
-                  <CardTitle className="text-xl">{feature.title}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <CardDescription className="text-base leading-relaxed">
-                    {feature.description}
-                  </CardDescription>
-                </CardContent>
-              </Card>
-            )
-          })}
-        </div>
+    <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6 lg:py-24">
+      <div className="max-w-2xl">
+        <h2 className="text-[2rem] font-semibold leading-tight tracking-[-0.03em] text-ink sm:text-[2.5rem]">
+          The marking scheme
+        </h2>
+        <p className="mt-4 text-[1.0625rem] leading-relaxed text-ink-soft">
+          Every idea is marked against the same questions. A clever idea that nobody needs still loses marks.
+        </p>
       </div>
+
+      <Sheet className="mt-10">
+        <SheetRow
+          bodyClassName="py-4 sm:py-4"
+          marginLabel="Key"
+          margin={
+            <ul className="flex flex-wrap gap-x-5 gap-y-2 text-meta text-ink-soft lg:flex-col">
+              <li className="flex items-center gap-2"><Tick className="size-4 text-marker" /> Holds up</li>
+              <li className="flex items-center gap-2"><Query className="size-4 text-marker" /> Needs evidence</li>
+              <li className="flex items-center gap-2"><Cross className="size-4 text-marker" /> A problem for the idea</li>
+            </ul>
+          }
+        >
+          <div className="hidden gap-6 sm:grid sm:grid-cols-[14rem_minmax(0,1fr)]">
+            <p className="label-caps">Criterion</p>
+            <p className="label-caps">What it asks</p>
+          </div>
+          <p className="label-caps sm:hidden">Criteria</p>
+        </SheetRow>
+        {criteria.map((c) => (
+          <SheetRow
+            key={c.name}
+            bodyClassName="py-5 sm:py-5"
+            marginLabel="Loses marks if"
+            marginDesktopOnly
+            margin={<MarginNote mark={<Cross className="size-4" />}>{c.fails}</MarginNote>}
+          >
+            <div className="grid gap-1 sm:grid-cols-[14rem_minmax(0,1fr)] sm:gap-6">
+              <h3 className="text-[1.0625rem] font-semibold text-ink">{c.name}</h3>
+              <p className="text-[1.0625rem] leading-relaxed text-ink-soft">{c.asks}</p>
+            </div>
+            <MarginNote className="mt-3 lg:hidden" mark={<Cross className="size-4" />}>{c.fails}</MarginNote>
+          </SheetRow>
+        ))}
+      </Sheet>
     </section>
-    </SelectionTooltip>
   )
 }
