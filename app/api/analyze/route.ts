@@ -83,24 +83,13 @@ Give 4 to 5 selfQuestions.`,
 PROJECT TO ANALYZE: "{idea}"
 {clarifications}
 
-Provide a comprehensive analysis focusing on these key areas:
-
-1. MARKET REALITY ASSESSMENT:
-- Does this solve a real, clear problem?
-- What is the competition and market saturation level?
-
-2. TECHNICAL FEASIBILITY ANALYSIS:
-- Development complexity and required skills assessment
-- Key technical risks and implementation challenges
-
-3. EXECUTIVE SUMMARY:
-- Overall viability assessment with clear reasoning
-- Recommended next steps and approach
+Give a detailed but scannable assessment. Prefer short, specific points over long paragraphs.
 
 IMPORTANT:
-- Be thorough and analytical
-- Focus on business viability and market potential
-- Keep responses clear and professional
+- Be honest and specific to this idea; avoid generic advice
+- Pros and cons are short points (one sentence each)
+- Cons are downsides of the idea itself (effort, cost, competition, adoption) and must not repeat the risks
+- The executive summary is 3-4 sentences: the overall verdict, the main reason, and the recommended next step
 - Avoid special characters that could break JSON
 
 Respond with ONLY valid JSON:
@@ -111,11 +100,10 @@ Respond with ONLY valid JSON:
   "successProbability": number (10-95),
   "detectedDomain": "detailed domain classification",
   "requiredExperience": "Beginner" | "Intermediate" | "Advanced",
-  "honestAiFeedback": "Write a comprehensive executive analysis covering market reality, technical feasibility, and executive summary",
-  "keyStrengths": {
-    "valueProposition": "Identify the unique value proposition and competitive advantages",
-    "marketFit": "Analyze scalability potential and growth opportunities"
-  },
+  "executiveSummary": "3-4 sentences: overall verdict, the main reason, and the recommended next step",
+  "pros": ["3-4 short points on what is good about this idea"],
+  "cons": ["3-4 short points on the downsides of this idea that are not covered by the risks"],
+  "redditQuery": "A 3-6 word search query that would find Reddit discussions about the problem this idea solves (the problem, not the product name)",
   "potentialChallenges": {
     "technicalRisks": "Identify specific technical challenges and development risks",
     "usabilityIssues": "Analyze security vulnerabilities and privacy considerations",
@@ -181,6 +169,11 @@ function cleanQuestions(raw: unknown, max: number): { question: string; why: str
     .filter((q) => q && typeof q.question === 'string' && q.question.trim())
     .slice(0, max)
     .map((q) => ({ question: q.question.trim(), why: typeof q.why === 'string' ? q.why.trim() : '' }))
+}
+
+function cleanPoints(raw: unknown, max = 5): string[] {
+  if (!Array.isArray(raw)) return []
+  return raw.filter((p): p is string => typeof p === 'string' && p.trim().length > 0).slice(0, max).map((p) => p.trim())
 }
 
 function applyContextAwareScoring(analysis: any, originalIdea: string) {
@@ -376,6 +369,8 @@ export async function POST(request: NextRequest) {
       },
       recommendations: finalAnalysis.recommendations || [],
       selfQuestions: cleanQuestions(finalAnalysis.selfQuestions, 5),
+      pros: cleanPoints(finalAnalysis.pros),
+      cons: cleanPoints(finalAnalysis.cons),
       similarProjects: finalAnalysis.similarProjects || [],
     }
 

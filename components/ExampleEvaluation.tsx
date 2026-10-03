@@ -109,19 +109,34 @@ function SummaryPage() {
   return (
     <>
       <SheetRow
-        margin={<MarginNote mark={<Tick />} title="2 strengths that hold up">Lead with these when you pitch it.</MarginNote>}
+        margin={<MarginNote mark={<Tick />} title="More for than against">Lead with the pros when you pitch it.</MarginNote>}
       >
-        <SheetHeading level={3}>Strengths</SheetHeading>
-        <dl className="grid gap-5 sm:grid-cols-2">
+        <SheetHeading level={3}>Pros and cons</SheetHeading>
+        <div className="grid gap-6 sm:grid-cols-2">
           <div>
-            <dt className="label-caps">Value proposition</dt>
-            <dd className="mt-1.5 text-[0.9375rem] leading-relaxed text-ink">Saves the hours students spend turning notes into flashcards before exams.</dd>
+            <p className="label-caps">Pros</p>
+            <ul className="mt-2 space-y-2 text-[0.9375rem] leading-relaxed text-ink">
+              {[
+                "Saves the hours students spend turning notes into flashcards.",
+                "The need peaks at a predictable time every term.",
+                "Works with recordings students already have.",
+              ].map((p) => (
+                <li key={p} className="flex gap-2.5"><Tick className="mt-0.5 size-4 text-marker" /><span>{p}</span></li>
+              ))}
+            </ul>
           </div>
           <div>
-            <dt className="label-caps">Market fit</dt>
-            <dd className="mt-1.5 text-[0.9375rem] leading-relaxed text-ink">Every student revises, and the need peaks at a predictable time each term.</dd>
+            <p className="label-caps">Cons</p>
+            <ul className="mt-2 space-y-2 text-[0.9375rem] leading-relaxed text-ink">
+              {[
+                "Transcription costs money once more than a few people use it.",
+                "Students only need it a few weeks a year.",
+              ].map((c) => (
+                <li key={c} className="flex gap-2.5"><Cross className="mt-0.5 size-4 text-marker" /><span>{c}</span></li>
+              ))}
+            </ul>
           </div>
-        </dl>
+        </div>
       </SheetRow>
       <SheetRow
         margin={

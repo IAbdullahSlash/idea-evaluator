@@ -84,6 +84,8 @@ Open [http://localhost:3000](http://localhost:3000) and start describing your id
 | `GEMINI_API_KEY` | Yes | Primary Gemini API key for analysis + chat |
 | `GEMINI_API_KEY_2` | No | Fallback key — the analyzer tries both until one works |
 | `GROQ_API_KEY` | No | Used by `/api/stage-data` for Groq/Llama processing |
+| `REDDIT_CLIENT_ID` | No | Reddit app ID for the Summary's top Reddit threads (create a "script" or "web" app at reddit.com/prefs/apps) |
+| `REDDIT_CLIENT_SECRET` | No | Secret for the same Reddit app. Without both, the Reddit section says it isn't connected |
 
 ## Project Structure
 

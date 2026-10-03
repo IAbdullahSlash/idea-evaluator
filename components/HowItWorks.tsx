@@ -4,8 +4,8 @@
  */
 const contents = [
   { n: 1, page: "Snapshot", gives: "A feasibility score out of 10, your odds of finishing, difficulty, and an honest reality check." },
-  { n: 2, page: "Summary", gives: "Strengths, risks, scope, a suggested stack, and existing projects like yours." },
-  { n: 3, page: "Plan", gives: "Phases with deliverables, the team you need, how to test it, the tools for each layer, security, and a cost estimate." },
+  { n: 2, page: "Summary", gives: "Pros and cons, risks, what people say on Reddit, existing projects like yours, and an executive summary." },
+  { n: 3, page: "Plan", gives: "Scope, a suggested stack, phases with deliverables, the team you need, security, and a cost estimate." },
   { n: 4, page: "Hand-off", gives: "A printable report and links to people who can help you build it." },
 ]
 

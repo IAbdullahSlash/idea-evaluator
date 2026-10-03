@@ -94,6 +94,11 @@ interface AnalysisData {
   aiVerdict?: string
   honestRealityCheck?: string
   selfQuestions?: GuidingQuestion[]
+  // Summary stage
+  executiveSummary?: string
+  pros?: string[]
+  cons?: string[]
+  redditQuery?: string
   projectTitle?: string
   projectDescription?: string
   contextAdjustment?: {
@@ -116,6 +121,22 @@ interface GuidingQuestion {
 interface Clarification {
   question: string
   answer: string
+}
+
+interface RedditThreadSummary {
+  title: string
+  subreddit: string
+  url: string
+  score: number
+  numComments: number
+  says: string | null
+  topComment: string | null
+}
+
+interface RedditResult {
+  status: "ok" | "error" | "not-configured"
+  takeaway?: string | null
+  threads: RedditThreadSummary[]
 }
 
 interface ExistingSolution {
@@ -195,6 +216,7 @@ export default function AnalysisPage() {
       quickWins: QuickWin[]
       existingSolutions: ExistingSolution[]
       githubRepos: GitHubRepo[]
+      reddit?: RedditResult
       analysis?: AnalysisData
     }
     stage3?: {
@@ -498,6 +520,18 @@ export default function AnalysisPage() {
       stage2Analysis = await analysisResponse.json()
     }
 
+    // Reddit runs in parallel with the other stage 2 sources
+    const redditPromise: Promise<RedditResult> = fetch("/api/reddit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query: stage2Analysis?.redditQuery || formData.idea.slice(0, 100),
+        idea: formData.idea,
+      }),
+    })
+      .then((r) => (r.ok ? r.json() : { status: "error", threads: [] }))
+      .catch(() => ({ status: "error", threads: [] }))
+
     const stage2Data = await fetchWithFallback(
       () => fetch("/api/stage-data", {
         method: "POST",
@@ -512,84 +546,15 @@ export default function AnalysisPage() {
       },
       "Stage 2 content"
     )
-    const repos = await fetchGitHubRepos(analysis?.projectTitle || formData.idea)
+    const [repos, reddit] = await Promise.all([
+      fetchGitHubRepos(analysis?.projectTitle || formData.idea),
+      redditPromise,
+    ])
 
     setStageData(prev => ({
       ...prev,
-      stage2: { ...stage2Data, githubRepos: repos, analysis: stage2Analysis }
+      stage2: { ...stage2Data, githubRepos: repos, reddit, analysis: stage2Analysis }
     }))
-  }
-
-  // REGENERATE FUNCTIONS
-  const regenerateStage1 = async () => {
-    setLoading(true)
-    try {
-      const response = await fetch('/api/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idea: formData.idea, stage: 'stage1', clarifications: clarifications ?? [] }),
-      })
-
-      if (response.ok) {
-        const rawAnalysisData = await response.json()
-
-        const validatedAnalysisData = validateAnalysisData(rawAnalysisData)
-        const enhancedAnalysis = {
-          ...validatedAnalysisData,
-          projectTitle: `Project: ${formData.idea.substring(0, 50)}${formData.idea.length > 50 ? "..." : ""}`,
-          projectDescription: formData.idea,
-        }
-
-        setAnalysis(enhancedAnalysis)
-        setStageData(prev => ({ ...prev, stage1: enhancedAnalysis }))
-      } else {
-        throw new Error('Failed to regenerate Stage 1')
-      }
-    } catch (error) {
-      console.error("[Regenerate] Stage 1 regeneration failed:", error)
-      alert("Failed to regenerate Stage 1. Please try again.")
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const regenerateStage2 = async () => {
-    setLoading(true)
-    try {
-      // Regenerate Stage 2 Analysis
-      const analysisResponse = await fetch('/api/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idea: formData.idea, stage: 'stage2', clarifications: clarifications ?? [] }),
-      })
-
-      let stage2Analysis = null
-      if (analysisResponse.ok) {
-        stage2Analysis = await analysisResponse.json()
-      }
-
-      // Regenerate Stage 2 Content
-      const [quickWins, existingSolutions, repos] = await Promise.all([
-        generateQuickWins(),
-        fetchExistingSolutions(),
-        fetchGitHubRepos(analysis?.projectTitle || formData.idea)
-      ])
-
-      setStageData(prev => ({
-        ...prev,
-        stage2: { 
-          quickWins, 
-          existingSolutions, 
-          githubRepos: repos,
-          analysis: stage2Analysis
-        }
-      }))
-    } catch (error) {
-      console.error("[Regenerate] Stage 2 regeneration failed:", error)
-      alert("Failed to regenerate Stage 2. Please try again.")
-    } finally {
-      setLoading(false)
-    }
   }
 
   // The plan's two halves: the roadmap (milestones, team, process) and the tech plan.
@@ -632,19 +597,6 @@ export default function AnalysisPage() {
   const loadPlanData = async () => {
     const data = await fetchPlan()
     setStageData(prev => ({ ...prev, ...splitPlan(data) }))
-  }
-
-  const regeneratePlan = async () => {
-    setLoading(true)
-    try {
-      const data = await fetchPlan()
-      setStageData(prev => ({ ...prev, ...splitPlan(data) }))
-    } catch (error) {
-      console.error("[Regenerate] Plan regeneration failed:", error)
-      alert("Failed to regenerate the plan. Please try again.")
-    } finally {
-      setLoading(false)
-    }
   }
 
   // 🔥 STAGE 4: Load Hand-off Data
@@ -1156,26 +1108,23 @@ export default function AnalysisPage() {
     )
   }
 
-  // 🎨 STAGE 2: EXECUTIVE SUMMARY
+  // 🎨 STAGE 2: SUMMARY
   const renderExecutiveSummary = () => {
     if (!analysis || !stageData.stage2) return null
     const s2 = stageData.stage2.analysis
     const s2Score = typeof s2?.feasibilityScore === "number" ? s2.feasibilityScore : null
-    const strengths = s2?.keyStrengths || analysis.keyStrengths
     const challenges = s2?.potentialChallenges || analysis.potentialChallenges
-    const strengthCount = [strengths?.valueProposition, strengths?.marketFit].filter((t) => !isPlaceholder(t)).length
     const riskTexts = [challenges?.technicalRisks, challenges?.usabilityIssues, challenges?.marketRisks].filter((t) => !isPlaceholder(t))
     const seriousCount = riskTexts.filter(isSerious).length
-    const scope = s2?.requirementsScope
-    const stack = s2?.techStack
-    const stackGroups = stack
-      ? ([
-          ["Frontend", stack.frontend],
-          ["Backend", stack.backend],
-          ["Database", stack.database],
-          ["Tools", stack.tools],
-        ] as const).filter(([, items]) => items && items.length > 0)
-      : []
+    // Older results have strengths instead of pros; show those rather than nothing.
+    const pros = s2?.pros?.length
+      ? s2.pros
+      : [s2?.keyStrengths?.valueProposition, s2?.keyStrengths?.marketFit].filter((t): t is string => !isPlaceholder(t))
+    const cons = s2?.cons ?? []
+    const reddit = stageData.stage2.reddit
+    const users = stageData.stage1?.targetUsersMarketFit?.primaryUsers || analysis.targetUsersMarketFit?.primaryUsers
+    const demand = stageData.stage1?.targetUsersMarketFit?.marketDemand || analysis.targetUsersMarketFit?.marketDemand
+    const executiveSummary = s2?.executiveSummary || s2?.honestAiFeedback
 
     return (
       <Sheet>
@@ -1201,38 +1150,52 @@ export default function AnalysisPage() {
                 </MarginNote>
               )}
               <p className="border-t border-rule pt-3 text-meta text-ink-soft tabular">
-                {plural(strengthCount, "strength")} · {plural(riskTexts.length, "risk")}
+                {plural(pros.length, "pro")} · {plural(cons.length, "con")} · {plural(riskTexts.length, "risk")}
                 {seriousCount > 0 ? <span className="font-semibold text-marker"> · {seriousCount} serious</span> : null}
               </p>
             </div>
           }
         >
           <h1 className="text-[1.5rem] font-semibold tracking-[-0.02em] text-ink sm:text-[1.75rem]">The full assessment</h1>
-          <Markdown className="mt-5 max-w-[68ch]">
-            {sanitizeMarkdown(s2?.honestAiFeedback || analysis.honestAiFeedback || "Analysis feedback not available")}
-          </Markdown>
+          <p className="mt-2 max-w-[60ch] text-[0.9375rem] text-ink-soft">
+            Pros and cons, the real risks, what people are saying, and what already exists.
+          </p>
         </SheetRow>
 
         <SheetRow
           margin={
-            strengthCount > 0 ? (
-              <MarginNote mark={<Tick />} title={`${plural(strengthCount, "strength")} that hold up`}>Lead with these when you pitch it.</MarginNote>
+            pros.length > cons.length ? (
+              <MarginNote mark={<Tick />} title="More for than against">Lead with the pros when you pitch it.</MarginNote>
+            ) : pros.length === 0 ? (
+              <MarginNote mark={<Query />} title="No clear pro">The analysis couldn&apos;t name one. That is a finding in itself.</MarginNote>
             ) : (
-              <MarginNote mark={<Query />} title="No clear strength">The analysis couldn&apos;t name one. That is a finding in itself.</MarginNote>
+              <MarginNote mark={<Query />} title="Evenly weighed">Make sure the pros are worth the cons before you plan.</MarginNote>
             )
           }
         >
-          <SheetHeading>Strengths</SheetHeading>
-          <dl className="grid gap-5 sm:grid-cols-2">
+          <SheetHeading>Pros and cons</SheetHeading>
+          <div className="grid gap-6 sm:grid-cols-2">
             <div>
-              <dt className="label-caps">Value proposition</dt>
-              <dd className="mt-1.5 text-[0.9375rem] leading-relaxed text-ink">{strengths?.valueProposition || "Value proposition assessment needed"}</dd>
+              <p className="label-caps">Pros</p>
+              <ul className="mt-2 space-y-2 text-[0.9375rem] leading-relaxed text-ink">
+                {pros.map((p, i) => (
+                  <li key={i} className="flex gap-2.5"><Tick className="mt-0.5 size-4 text-marker" /><span>{p}</span></li>
+                ))}
+              </ul>
             </div>
             <div>
-              <dt className="label-caps">Market fit</dt>
-              <dd className="mt-1.5 text-[0.9375rem] leading-relaxed text-ink">{strengths?.marketFit || "Market fit analysis needed"}</dd>
+              <p className="label-caps">Cons</p>
+              {cons.length === 0 ? (
+                <EmptyLine>No cons listed for this result.</EmptyLine>
+              ) : (
+                <ul className="mt-2 space-y-2 text-[0.9375rem] leading-relaxed text-ink">
+                  {cons.map((c, i) => (
+                    <li key={i} className="flex gap-2.5"><Cross className="mt-0.5 size-4 text-marker" /><span>{c}</span></li>
+                  ))}
+                </ul>
+              )}
             </div>
-          </dl>
+          </div>
         </SheetRow>
 
         <SheetRow
@@ -1262,64 +1225,60 @@ export default function AnalysisPage() {
           </dl>
         </SheetRow>
 
-        {scope && (scope.mustHaveFeatures?.length || scope.niceToHaveFeatures?.length || scope.constraints?.length) ? (
-          <SheetRow
-            margin={
-              (scope.mustHaveFeatures?.length || 0) > 5 ? (
-                <MarginNote mark={<Query />} title={`${scope.mustHaveFeatures?.length} must-haves is a lot`}>
-                  Cut to the five that prove the idea. The rest waits until users ask.
-                </MarginNote>
-              ) : (
-                <MarginNote mark={<Tick />} title={`${plural(scope.mustHaveFeatures?.length || 0, "must-have")}`}>
-                  A buildable core. Everything else waits until users ask for it.
-                </MarginNote>
-              )
-            }
-          >
-            <SheetHeading>Scope</SheetHeading>
-            <div className="grid gap-6 sm:grid-cols-3">
-              {([
-                ["Must have", scope.mustHaveFeatures],
-                ["Nice to have", scope.niceToHaveFeatures],
-                ["Constraints", scope.constraints],
-              ] as const).map(([label, items]) => (
-                <div key={label}>
-                  <p className="label-caps">{label}</p>
-                  <ul className="mt-2 space-y-1.5 text-[0.9375rem] text-ink">
-                    {(items || []).map((item, i) => (
-                      <li key={i} className="flex gap-2"><span className="text-pencil">–</span><span>{item}</span></li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
+        <SheetRow
+          margin={
+            !reddit || reddit.status === "not-configured" ? (
+              <MarginNote mark={<Query />} title="Reddit not connected">Real threads appear here once Reddit is connected.</MarginNote>
+            ) : reddit.status === "error" ? (
+              <MarginNote mark={<Query />} title="Reddit unavailable">Couldn&apos;t reach Reddit this time.</MarginNote>
+            ) : reddit.threads.length === 0 ? (
+              <MarginNote mark={<Query />} title="No threads found">Nobody is discussing this problem on Reddit, or it is phrased differently there.</MarginNote>
+            ) : (
+              <MarginNote mark={<Query />} title={`${plural(reddit.threads.length, "thread")} on Reddit`}>
+                {reddit.takeaway || "Read what people say before you decide."}
+              </MarginNote>
+            )
+          }
+        >
+          <SheetHeading>Market: what people are saying</SheetHeading>
+          <dl className="grid gap-5 sm:grid-cols-2">
+            <div>
+              <dt className="label-caps">Users</dt>
+              <dd className="mt-1.5 text-[0.9375rem] leading-relaxed text-ink">{users || "User analysis needed"}</dd>
             </div>
-          </SheetRow>
-        ) : null}
+            <div>
+              <dt className="label-caps">Demand</dt>
+              <dd className="mt-1.5 text-[0.9375rem] leading-relaxed text-ink">{demand || "Market demand assessment needed"}</dd>
+            </div>
+          </dl>
 
-        {stackGroups.length > 0 ? (
-          <SheetRow
-            margin={(() => {
-              const total = stackGroups.reduce((n, [, items]) => n + items.length, 0)
-              return total > 10 ? (
-                <MarginNote mark={<Query />} title={`${total} technologies`}>A lot to learn at once. Drop anything you haven&apos;t used before unless it is essential.</MarginNote>
-              ) : (
-                <MarginNote mark={<Tick />} title={`${total} technologies`}>A manageable stack to learn and build with.</MarginNote>
-              )
-            })()}
-          >
-            <SheetHeading>Suggested stack</SheetHeading>
-            <dl className="grid gap-4 sm:grid-cols-2">
-              {stackGroups.map(([label, items]) => (
-                <div key={label}>
-                  <dt className="label-caps">{label}</dt>
-                  <dd className="mt-2 flex flex-wrap gap-1.5">
-                    {items.map((t, i) => <Chip key={i}>{t}</Chip>)}
-                  </dd>
-                </div>
+          <p className="label-caps mt-7">Top Reddit threads</p>
+          {!reddit || reddit.status === "not-configured" ? (
+            <EmptyLine>Reddit isn&apos;t connected yet, so no threads are shown.</EmptyLine>
+          ) : reddit.status === "error" ? (
+            <EmptyLine>Reddit couldn&apos;t be reached. Try again later.</EmptyLine>
+          ) : reddit.threads.length === 0 ? (
+            <EmptyLine>No Reddit threads found for this idea.</EmptyLine>
+          ) : (
+            <ol className="mt-2 divide-y divide-rule">
+              {reddit.threads.map((t, i) => (
+                <li key={i} className="py-4 first:pt-1 last:pb-0">
+                  <LinkTitle href={t.url}>{t.title}</LinkTitle>
+                  <p className="mt-0.5 text-meta text-pencil tabular">
+                    r/{t.subreddit} · {t.score.toLocaleString()} upvotes · {t.numComments.toLocaleString()} comments
+                  </p>
+                  {t.says ? (
+                    <p className="mt-1.5 max-w-[70ch] text-[0.9375rem] leading-relaxed text-ink">{t.says}</p>
+                  ) : t.topComment ? (
+                    <blockquote className="mt-1.5 max-w-[70ch] border-l border-marker pl-3 text-sm leading-relaxed text-ink-soft line-clamp-3">
+                      {t.topComment}
+                    </blockquote>
+                  ) : null}
+                </li>
               ))}
-            </dl>
-          </SheetRow>
-        ) : null}
+            </ol>
+          )}
+        </SheetRow>
 
         <SheetRow
           margin={
@@ -1328,33 +1287,16 @@ export default function AnalysisPage() {
             </MarginNote>
           }
         >
-          <div className="grid gap-8 sm:grid-cols-2">
-            <div>
-              <SheetHeading level={3}>Market</SheetHeading>
-              <p className="text-[0.9375rem] leading-relaxed text-ink">
-                <span className="font-semibold">Users: </span>
-                {stageData.stage1?.targetUsersMarketFit?.primaryUsers || analysis.targetUsersMarketFit?.primaryUsers || "User analysis needed"}
-              </p>
-              <p className="mt-2 text-[0.9375rem] leading-relaxed text-ink">
-                <span className="font-semibold">Demand: </span>
-                {stageData.stage1?.targetUsersMarketFit?.marketDemand ||
-                  analysis.targetUsersMarketFit?.marketDemand ||
-                  (analysis.detectedDomain ? `Growing demand in ${analysis.detectedDomain} sector` : "Market demand assessment needed")}
-              </p>
-            </div>
-            <div>
-              <SheetHeading level={3}>Quick wins</SheetHeading>
-              <ul className="space-y-3">
-                {stageData.stage2.quickWins.map((win, index) => (
-                  <li key={index} className="text-[0.9375rem] leading-relaxed">
-                    <span className="font-semibold text-ink">{win.title}</span>
-                    <span className="text-pencil tabular"> · {win.timeEstimate}</span>
-                    <p className="text-ink-soft">{win.description}</p>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
+          <SheetHeading>Quick wins</SheetHeading>
+          <ul className="grid gap-x-8 gap-y-3 sm:grid-cols-2">
+            {stageData.stage2.quickWins.map((win, index) => (
+              <li key={index} className="text-[0.9375rem] leading-relaxed">
+                <span className="font-semibold text-ink">{win.title}</span>
+                <span className="text-pencil tabular"> · {win.timeEstimate}</span>
+                <p className="text-ink-soft">{win.description}</p>
+              </li>
+            ))}
+          </ul>
         </SheetRow>
 
         <SheetRow
@@ -1410,19 +1352,29 @@ export default function AnalysisPage() {
           )}
         </SheetRow>
 
+        {executiveSummary ? (
+          <SheetRow
+            marginLabel="Examiner's note"
+            margin={<MarginNote mark={scoreMark(s2Score ?? analysis.feasibilityScore)} title="The bottom line">The highlighted line is the verdict.</MarginNote>}
+          >
+            <SheetHeading>Executive summary</SheetHeading>
+            <HighlightLead className="max-w-[68ch]" text={executiveSummary} />
+          </SheetRow>
+        ) : null}
+
         <SheetRow
           marginLabel="Next"
           margin={
             <ContinueButton
               to={AnalysisStage.PLAN}
               label="Continue to the plan"
-              hint="Next: phases, team, tools, and costs."
+              hint="Next: scope, stack, phases, team, and costs."
             />
           }
         >
           <SheetHeading>Still worth it?</SheetHeading>
           <p className="max-w-[60ch] text-[0.9375rem] leading-relaxed text-ink-soft">
-            If the risks above feel bigger than the strengths, go back to the snapshot, edit the idea, and mark it again before planning it.
+            If the cons and risks above outweigh the pros, go back to the snapshot, edit the idea, and mark it again before planning it.
           </p>
         </SheetRow>
       </Sheet>
@@ -1433,13 +1385,58 @@ export default function AnalysisPage() {
   const renderPlan = () => {
     if (!analysis || !stageData.stage3 || !stageData.stage4) return null
     const totalFte = stageData.stage3.teamRoles.reduce((sum, r) => sum + (Number(r.fteEstimate) || 0), 0)
+    const s2 = stageData.stage2?.analysis
+    const scope = s2?.requirementsScope
+    const stack = s2?.techStack
+    const stackGroups = stack
+      ? ([
+          ["Frontend", stack.frontend],
+          ["Backend", stack.backend],
+          ["Database", stack.database],
+          ["Tools", stack.tools],
+        ] as const).filter(([, items]) => items && items.length > 0)
+      : []
 
     return (
       <Sheet>
         <SheetRow marginFirstOnMobile margin={<MarginNote mark={<Tick />} title={`${stageData.stage3.projectMilestones.length} phases`}>Each phase starts when the one before it is done.</MarginNote>}>
           <h1 className="text-[1.5rem] font-semibold tracking-[-0.02em] text-ink sm:text-[1.75rem]">The plan</h1>
-          <p className="mt-2 max-w-[60ch] text-[0.9375rem] text-ink-soft">How to build it, who you need, and what to build it with.</p>
+          <p className="mt-2 max-w-[60ch] text-[0.9375rem] text-ink-soft">What to build first, how to build it, who you need, and what to build it with.</p>
         </SheetRow>
+
+        {scope && (scope.mustHaveFeatures?.length || scope.niceToHaveFeatures?.length || scope.constraints?.length) ? (
+          <SheetRow
+            margin={
+              (scope.mustHaveFeatures?.length || 0) > 5 ? (
+                <MarginNote mark={<Query />} title={`${scope.mustHaveFeatures?.length} must-haves is a lot`}>
+                  Cut to the five that prove the idea. The rest waits until users ask.
+                </MarginNote>
+              ) : (
+                <MarginNote mark={<Tick />} title={`${plural(scope.mustHaveFeatures?.length || 0, "must-have")}`}>
+                  A buildable core. Everything else waits until users ask for it.
+                </MarginNote>
+              )
+            }
+          >
+            <SheetHeading>Scope</SheetHeading>
+            <div className="grid gap-6 sm:grid-cols-3">
+              {([
+                ["Must have", scope.mustHaveFeatures],
+                ["Nice to have", scope.niceToHaveFeatures],
+                ["Constraints", scope.constraints],
+              ] as const).map(([label, items]) => (
+                <div key={label}>
+                  <p className="label-caps">{label}</p>
+                  <ul className="mt-2 space-y-1.5 text-[0.9375rem] text-ink">
+                    {(items || []).map((item, i) => (
+                      <li key={i} className="flex gap-2"><span className="text-pencil">–</span><span>{item}</span></li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </SheetRow>
+        ) : null}
 
         {stageData.stage3.projectMilestones.map((milestone, index) => (
           <SheetRow
@@ -1525,6 +1522,31 @@ export default function AnalysisPage() {
             </table>
           </div>
         </SheetRow>
+
+        {stackGroups.length > 0 ? (
+          <SheetRow
+            margin={(() => {
+              const total = stackGroups.reduce((n, [, items]) => n + items.length, 0)
+              return total > 10 ? (
+                <MarginNote mark={<Query />} title={`${total} technologies`}>A lot to learn at once. Drop anything you haven&apos;t used before unless it is essential.</MarginNote>
+              ) : (
+                <MarginNote mark={<Tick />} title={`${total} technologies`}>A manageable stack to learn and build with.</MarginNote>
+              )
+            })()}
+          >
+            <SheetHeading>Suggested stack</SheetHeading>
+            <dl className="grid gap-4 sm:grid-cols-2">
+              {stackGroups.map(([label, items]) => (
+                <div key={label}>
+                  <dt className="label-caps">{label}</dt>
+                  <dd className="mt-2 flex flex-wrap gap-1.5">
+                    {items.map((t, i) => <Chip key={i}>{t}</Chip>)}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </SheetRow>
+        ) : null}
 
         <SheetRow
           margin={(() => {
@@ -2283,13 +2305,6 @@ export default function AnalysisPage() {
     }
   }
 
-  const regenerateCurrent: Partial<Record<AnalysisStage, () => void>> = {
-    [AnalysisStage.QUICK_SNAPSHOT]: regenerateStage1,
-    [AnalysisStage.EXECUTIVE_SUMMARY]: regenerateStage2,
-    [AnalysisStage.PLAN]: regeneratePlan,
-  }
-  const regenerate = regenerateCurrent[currentStage]
-
   // A stage whose data is missing (e.g. after a page refresh) gets a clear way back.
   const renderMissingStage = () => (
     <Sheet>
@@ -2324,7 +2339,7 @@ export default function AnalysisPage() {
           <>
             {analysis ? (
               <>
-                {canEditIdea || regenerate ? (
+                {canEditIdea ? (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="icon" className="size-8 sm:hidden" aria-label="More actions">
@@ -2335,11 +2350,6 @@ export default function AnalysisPage() {
                     {canEditIdea ? (
                       <DropdownMenuItem onSelect={goBackToInput}>
                         <Edit3 /> Edit idea
-                      </DropdownMenuItem>
-                    ) : null}
-                    {regenerate ? (
-                      <DropdownMenuItem onSelect={() => regenerate()} disabled={loading}>
-                        <RefreshCw /> Mark again
                       </DropdownMenuItem>
                     ) : null}
                   </DropdownMenuContent>
@@ -2360,12 +2370,6 @@ export default function AnalysisPage() {
               {canEditIdea ? (
                 <Button variant="ghost" size="sm" onClick={goBackToInput} aria-label="Edit idea">
                   <Edit3 /> <span className="hidden md:inline">Edit idea</span>
-                </Button>
-              ) : null}
-              {regenerate ? (
-                <Button variant="ghost" size="sm" onClick={regenerate} disabled={loading} aria-label="Mark again">
-                  {loading ? <Loader2 className="animate-spin" /> : <RefreshCw />}
-                  <span className="hidden md:inline">Mark again</span>
                 </Button>
               ) : null}
             </div>
