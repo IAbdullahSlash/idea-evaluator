@@ -15,7 +15,7 @@ export function CTA() {
           </p>
         </div>
         <Button asChild size="lg" className="h-12 w-full px-6 text-base sm:w-auto">
-          <Link href="/analysis">
+          <Link href="/analysis?new">
             Start with a blank page <ArrowRight />
           </Link>
         </Button>

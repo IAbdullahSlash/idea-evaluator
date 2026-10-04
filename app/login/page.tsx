@@ -20,7 +20,7 @@ export default function LoginPage() {
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault()
     // Mock login - redirect to analysis page
-    router.push("/analysis")
+    router.push("/analysis?new")
   }
 
   return (
@@ -49,7 +49,7 @@ export default function LoginPage() {
         </form>
       </Sheet>
 
-      <Link href="/analysis" className="mt-6 text-sm font-medium text-ink-soft underline decoration-rule hover:text-ink hover:decoration-marker">
+      <Link href="/analysis?new" className="mt-6 text-sm font-medium text-ink-soft underline decoration-rule hover:text-ink hover:decoration-marker">
         Evaluate an idea without signing in
       </Link>
     </div>

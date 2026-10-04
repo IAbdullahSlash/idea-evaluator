@@ -233,6 +233,9 @@ interface TaskProgress {
   [key: string]: boolean
 }
 
+// Everything an evaluation keeps in localStorage across refreshes
+const SAVED_KEYS = ["projectAnalysis", "stageData", "evaluationInput", "currentStage", "taskProgress"]
+
 // The plan's two halves: the roadmap (phases, team, process) and the tech plan.
 const splitPlan = (plan: Plan) => ({
   stage3: {
@@ -317,6 +320,12 @@ export default function AnalysisPage() {
   // 🚀 LOCAL STORAGE HYDRATION — restore progress after page refresh
   useEffect(() => {
     try {
+      // "Evaluate an idea" links add ?new: start on a blank page instead of the last evaluation.
+      // The flag is removed at once so a refresh keeps the new evaluation's progress.
+      if (new URLSearchParams(window.location.search).has("new")) {
+        for (const key of SAVED_KEYS) localStorage.removeItem(key)
+        window.history.replaceState(null, "", window.location.pathname)
+      }
       const savedStage = localStorage.getItem("currentStage")
       if (savedStage !== null) {
         const stageNum = parseInt(savedStage, 10) as AnalysisStage

@@ -12,7 +12,7 @@ export function Navbar() {
         <>
           <ThemeToggle />
           <Button asChild size="sm">
-            <Link href="/analysis">
+            <Link href="/analysis?new">
               Evaluate<span className="hidden sm:inline"> an idea</span>
             </Link>
           </Button>

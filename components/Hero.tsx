@@ -29,7 +29,7 @@ export function Hero() {
     } catch {
       // Storage can be unavailable (private mode); the analysis page still opens blank.
     }
-    router.push("/analysis")
+    router.push("/analysis?new")
   }
 
   return (
