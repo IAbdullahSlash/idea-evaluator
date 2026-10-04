@@ -1284,71 +1284,8 @@ export default function AnalysisPage() {
         >
           <h1 className="text-[1.5rem] font-semibold tracking-[-0.02em] text-ink sm:text-[1.75rem]">The full assessment</h1>
           <p className="mt-2 max-w-[60ch] text-[0.9375rem] text-ink-soft">
-            Pros and cons, the real risks, what people are saying, and what already exists.
+            What people are saying, the real risks, what already exists, and the pros and cons.
           </p>
-        </SheetRow>
-
-        <SheetRow
-          margin={
-            pros.length > cons.length ? (
-              <MarginNote mark={<Tick />} title="More for than against">Lead with the pros when you pitch it.</MarginNote>
-            ) : pros.length === 0 ? (
-              <MarginNote mark={<Query />} title="No clear pro">The analysis couldn&apos;t name one. That is a finding in itself.</MarginNote>
-            ) : (
-              <MarginNote mark={<Query />} title="Evenly weighed">Make sure the pros are worth the cons before you plan.</MarginNote>
-            )
-          }
-        >
-          <SheetHeading>Pros and cons</SheetHeading>
-          <div className="grid gap-6 sm:grid-cols-2">
-            <div>
-              <p className="label-caps">Pros</p>
-              <ul className="mt-2 space-y-2 text-[0.9375rem] leading-relaxed text-ink">
-                {pros.map((p, i) => (
-                  <li key={i} className="flex gap-2.5"><Tick className="mt-0.5 size-4 text-marker" /><span>{p}</span></li>
-                ))}
-              </ul>
-            </div>
-            <div>
-              <p className="label-caps">Cons</p>
-              {cons.length === 0 ? (
-                <EmptyLine>No cons listed for this result.</EmptyLine>
-              ) : (
-                <ul className="mt-2 space-y-2 text-[0.9375rem] leading-relaxed text-ink">
-                  {cons.map((c, i) => (
-                    <li key={i} className="flex gap-2.5"><Cross className="mt-0.5 size-4 text-marker" /><span>{c}</span></li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-        </SheetRow>
-
-        <SheetRow
-          margin={
-            <MarginNote
-              mark={seriousCount > 0 ? <DoubleCross title="Serious risk" /> : <Cross />}
-              title={seriousCount > 0 ? `${plural(seriousCount, "serious risk")}` : plural(riskTexts.length, "risk")}
-            >
-              The highlighted part of each is what to solve first.
-            </MarginNote>
-          }
-        >
-          <SheetHeading>Risks</SheetHeading>
-          <dl className="grid gap-5 sm:grid-cols-3">
-            <div>
-              <dt className="label-caps">Technical</dt>
-              <dd className="mt-1.5 text-[0.9375rem] leading-relaxed text-ink"><ClauseLead text={challenges?.technicalRisks || "Technical risk assessment needed"} /></dd>
-            </div>
-            <div>
-              <dt className="label-caps">Usability</dt>
-              <dd className="mt-1.5 text-[0.9375rem] leading-relaxed text-ink"><ClauseLead text={challenges?.usabilityIssues || "Usability review needed"} /></dd>
-            </div>
-            <div>
-              <dt className="label-caps">Market</dt>
-              <dd className="mt-1.5 text-[0.9375rem] leading-relaxed text-ink"><ClauseLead text={challenges?.marketRisks || "Market risk analysis needed"} /></dd>
-            </div>
-          </dl>
         </SheetRow>
 
         <SheetRow
@@ -1434,26 +1371,32 @@ export default function AnalysisPage() {
           ) : null}
         </SheetRow>
 
-        {stageData.stage2.quickWins.length > 0 ? (
         <SheetRow
           margin={
-            <MarginNote mark={<Tick />} title={plural(stageData.stage2.quickWins.length, "quick win")}>
-              Start here in the next week or two.
+            <MarginNote
+              mark={seriousCount > 0 ? <DoubleCross title="Serious risk" /> : <Cross />}
+              title={seriousCount > 0 ? `${plural(seriousCount, "serious risk")}` : plural(riskTexts.length, "risk")}
+            >
+              The highlighted part of each is what to solve first.
             </MarginNote>
           }
         >
-          <SheetHeading>Quick wins</SheetHeading>
-          <ul className="grid gap-x-8 gap-y-3 sm:grid-cols-2">
-            {stageData.stage2.quickWins.map((win, index) => (
-              <li key={index} className="text-[0.9375rem] leading-relaxed">
-                <span className="font-semibold text-ink">{win.title}</span>
-                {win.timeEstimate ? <span className="text-pencil tabular"> · {win.timeEstimate}</span> : null}
-                <p className="text-ink-soft">{win.description}</p>
-              </li>
-            ))}
-          </ul>
+          <SheetHeading>Risks</SheetHeading>
+          <dl className="grid gap-5 sm:grid-cols-3">
+            <div>
+              <dt className="label-caps">Technical</dt>
+              <dd className="mt-1.5 text-[0.9375rem] leading-relaxed text-ink"><ClauseLead text={challenges?.technicalRisks || "Technical risk assessment needed"} /></dd>
+            </div>
+            <div>
+              <dt className="label-caps">Usability</dt>
+              <dd className="mt-1.5 text-[0.9375rem] leading-relaxed text-ink"><ClauseLead text={challenges?.usabilityIssues || "Usability review needed"} /></dd>
+            </div>
+            <div>
+              <dt className="label-caps">Market</dt>
+              <dd className="mt-1.5 text-[0.9375rem] leading-relaxed text-ink"><ClauseLead text={challenges?.marketRisks || "Market risk analysis needed"} /></dd>
+            </div>
+          </dl>
         </SheetRow>
-        ) : null}
 
         <SheetRow
           margin={
@@ -1520,6 +1463,63 @@ export default function AnalysisPage() {
             </ul>
           )}
         </SheetRow>
+
+        <SheetRow
+          margin={
+            pros.length > cons.length ? (
+              <MarginNote mark={<Tick />} title="More for than against">Lead with the pros when you pitch it.</MarginNote>
+            ) : pros.length === 0 ? (
+              <MarginNote mark={<Query />} title="No clear pro">The analysis couldn&apos;t name one. That is a finding in itself.</MarginNote>
+            ) : (
+              <MarginNote mark={<Query />} title="Evenly weighed">Make sure the pros are worth the cons before you plan.</MarginNote>
+            )
+          }
+        >
+          <SheetHeading>Pros and cons</SheetHeading>
+          <div className="grid gap-6 sm:grid-cols-2">
+            <div>
+              <p className="label-caps">Pros</p>
+              <ul className="mt-2 space-y-2 text-[0.9375rem] leading-relaxed text-ink">
+                {pros.map((p, i) => (
+                  <li key={i} className="flex gap-2.5"><Tick className="mt-0.5 size-4 text-marker" /><span>{p}</span></li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <p className="label-caps">Cons</p>
+              {cons.length === 0 ? (
+                <EmptyLine>No cons listed for this result.</EmptyLine>
+              ) : (
+                <ul className="mt-2 space-y-2 text-[0.9375rem] leading-relaxed text-ink">
+                  {cons.map((c, i) => (
+                    <li key={i} className="flex gap-2.5"><Cross className="mt-0.5 size-4 text-marker" /><span>{c}</span></li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </SheetRow>
+
+        {stageData.stage2.quickWins.length > 0 ? (
+        <SheetRow
+          margin={
+            <MarginNote mark={<Tick />} title={plural(stageData.stage2.quickWins.length, "quick win")}>
+              Start here in the next week or two.
+            </MarginNote>
+          }
+        >
+          <SheetHeading>Quick wins</SheetHeading>
+          <ul className="grid gap-x-8 gap-y-3 sm:grid-cols-2">
+            {stageData.stage2.quickWins.map((win, index) => (
+              <li key={index} className="text-[0.9375rem] leading-relaxed">
+                <span className="font-semibold text-ink">{win.title}</span>
+                {win.timeEstimate ? <span className="text-pencil tabular"> · {win.timeEstimate}</span> : null}
+                <p className="text-ink-soft">{win.description}</p>
+              </li>
+            ))}
+          </ul>
+        </SheetRow>
+        ) : null}
 
         {executiveSummary ? (
           <SheetRow
