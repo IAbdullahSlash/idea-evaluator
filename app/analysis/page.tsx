@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { validateIdea } from "@/lib/validation"
 import { fetchWithFallback } from "@/lib/fetch-with-fallback"
 import { planSchema, type Plan } from "@/lib/schemas/plan"
+import { CONTEXT_QUESTIONS, missingContext } from "@/lib/schemas/context"
 import { cn } from "@/lib/utils"
 import { CRITERIA } from "@/lib/schemas/snapshot"
 import {
@@ -301,6 +302,8 @@ export default function AnalysisPage() {
   const [analyzing, setAnalyzing] = useState(false)
   // Why the last attempt to mark the idea failed, shown on the page with a retry
   const [analyzeError, setAnalyzeError] = useState<string | null>(null)
+  // Set once the idea is submitted, so unanswered questions are only flagged after a try
+  const [showMissing, setShowMissing] = useState(false)
   // Why the next page failed to load, shown under its Continue button
   const [stageError, setStageError] = useState<string | null>(null)
   // Saved stage data is only written back once it has been read on load
@@ -498,6 +501,19 @@ export default function AnalysisPage() {
     if (e) e.preventDefault()
 
     if (!formData.idea.trim()) return
+
+    // The four questions are required; flag the unanswered ones and start at the first
+    const missing = missingContext(formData)
+    if (missing.length > 0) {
+      setShowMissing(true)
+      setAnalyzeError(
+        missing.length === 1
+          ? `Answer "${missing[0].label}" so the idea can be marked for you.`
+          : `Answer the ${missing.length} questions beside the idea so it can be marked for you.`
+      )
+      document.getElementById(missing[0].id)?.focus()
+      return
+    }
 
     // 🛡️ Client-side guardrail check (validateIdea is shared with the server)
     const clientError = validateIdea(formData.idea)
@@ -845,7 +861,8 @@ export default function AnalysisPage() {
 
   // 🎨 STAGE 0: THE BLANK SCRIPT
   const renderInputStage = () => (
-    <form onSubmit={handleAnalyzeIdea}>
+    // noValidate: the missing answers are flagged beside each question instead of in browser popups
+    <form onSubmit={handleAnalyzeIdea} noValidate>
       <Sheet>
         <SheetRow
           divider={false}
@@ -856,88 +873,39 @@ export default function AnalysisPage() {
               <AnalyzeErrorNote />
               <div>
                 <p className="text-sm font-semibold text-marker">Context for the examiner</p>
-                <p className="mt-1 text-meta text-pencil">Optional. It changes how strictly the idea is marked.</p>
+                <p className="mt-1 text-meta text-pencil">All four are required. They set how strictly the idea is marked and how the plan is sized.</p>
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="projectType" className="text-meta font-medium text-ink-soft">What is it for?</Label>
-                <div className="relative">
-                  <select
-                    id="projectType"
-                    className={selectClass}
-                    value={formData.projectType}
-                    onChange={(e) => setFormData(prev => ({ ...prev, projectType: e.target.value }))}
-                  >
-                    <option value="">Not specified</option>
-                    <option value="MVP">MVP</option>
-                    <option value="Full Product">Full product</option>
-                    <option value="Prototype">Prototype</option>
-                    <option value="API/Service">API / service</option>
-                    <option value="Mobile App">Mobile app</option>
-                    <option value="Web App">Web app</option>
-                  </select>
-                  <SelectChevron />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="domain" className="text-meta font-medium text-ink-soft">Domain</Label>
-                <div className="relative">
-                  <select
-                    id="domain"
-                    className={selectClass}
-                    value={formData.domain}
-                    onChange={(e) => setFormData(prev => ({ ...prev, domain: e.target.value }))}
-                  >
-                    <option value="">Not specified</option>
-                    <option value="AI/ML">AI / machine learning</option>
-                    <option value="FinTech">FinTech</option>
-                    <option value="EdTech">EdTech</option>
-                    <option value="HealthTech">HealthTech</option>
-                    <option value="E-commerce">E-commerce</option>
-                    <option value="SaaS">SaaS</option>
-                    <option value="Social">Social</option>
-                    <option value="Gaming">Gaming</option>
-                    <option value="Productivity">Productivity</option>
-                    <option value="IoT">IoT</option>
-                    <option value="Other">Other</option>
-                  </select>
-                  <SelectChevron />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="experience" className="text-meta font-medium text-ink-soft">Your experience</Label>
-                <div className="relative">
-                  <select
-                    id="experience"
-                    className={selectClass}
-                    value={formData.experience}
-                    onChange={(e) => setFormData(prev => ({ ...prev, experience: e.target.value }))}
-                  >
-                    <option value="">Not specified</option>
-                    <option value="Beginner">Beginner</option>
-                    <option value="Intermediate">Intermediate</option>
-                    <option value="Advanced">Advanced</option>
-                  </select>
-                  <SelectChevron />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="timeline" className="text-meta font-medium text-ink-soft">Time you have</Label>
-                <div className="relative">
-                  <select
-                    id="timeline"
-                    className={selectClass}
-                    value={formData.timeline}
-                    onChange={(e) => setFormData(prev => ({ ...prev, timeline: e.target.value }))}
-                  >
-                    <option value="">Not specified</option>
-                    <option value="1-2 weeks">1–2 weeks</option>
-                    <option value="1-2 months">1–2 months</option>
-                    <option value="3-6 months">3–6 months</option>
-                    <option value="6+ months">6+ months</option>
-                  </select>
-                  <SelectChevron />
-                </div>
-              </div>
+              {CONTEXT_QUESTIONS.map((q) => {
+                const invalid = showMissing && !q.options.some((o) => o.value === formData[q.id])
+                return (
+                  <div key={q.id} className="space-y-1.5">
+                    <Label htmlFor={q.id} className="text-meta font-medium text-ink-soft">
+                      {q.label} <span className="text-marker" aria-hidden>*</span>
+                    </Label>
+                    <div className="relative">
+                      <select
+                        id={q.id}
+                        required
+                        aria-invalid={invalid || undefined}
+                        aria-describedby={invalid ? `${q.id}-missing` : undefined}
+                        className={cn(selectClass, !formData[q.id] && "text-pencil", invalid && "border-marker")}
+                        value={formData[q.id]}
+                        onChange={(e) => {
+                          setFormData(prev => ({ ...prev, [q.id]: e.target.value }))
+                          if (showMissing) setAnalyzeError(null)
+                        }}
+                      >
+                        <option value="" disabled>Choose one</option>
+                        {q.options.map((o) => (
+                          <option key={o.value} value={o.value} className="text-ink">{o.label}</option>
+                        ))}
+                      </select>
+                      <SelectChevron />
+                    </div>
+                    {invalid ? <p id={`${q.id}-missing`} className="text-meta text-marker">Required</p> : null}
+                  </div>
+                )
+              })}
             </div>
           }
         >

@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { validateIdea } from '@/lib/validation'
+import { missingContext } from '@/lib/schemas/context'
 import { NoModelAvailableError, forget, generateJsonWithMeta } from '@/lib/llm'
 import { overallScore, snapshotSchema } from '@/lib/schemas/snapshot'
 
@@ -217,6 +218,17 @@ export async function POST(request: NextRequest) {
 
     if (!idea) {
       return NextResponse.json({ error: 'Idea is required' }, { status: 400 })
+    }
+
+    // The Snapshot needs all four context answers; later stages accept older saved inputs without them
+    if (stage === 'stage1') {
+      const missing = missingContext({ domain, projectType, experience, timeline })
+      if (missing.length > 0) {
+        return NextResponse.json(
+          { error: `Answer ${missing.map((q) => `"${q.label}"`).join(', ')} so the idea can be marked for you.` },
+          { status: 400 }
+        )
+      }
     }
 
     // 🛡️ SERVER-SIDE INTENT GUARDRAILS
