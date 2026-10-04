@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { validateIdea } from "@/lib/validation"
 import { fetchWithFallback } from "@/lib/fetch-with-fallback"
+import { planSchema, type Plan } from "@/lib/schemas/plan"
 import { cn } from "@/lib/utils"
 import { CRITERIA } from "@/lib/schemas/snapshot"
 import {
@@ -192,7 +193,7 @@ interface ProjectMilestone {
 }
 
 interface TechRoadmapItem {
-  category: "Infrastructure" | "Dev Stack" | "Integrations" | "Testing" | "Scalability"
+  category: string
   technologies: string[]
   timeline: string
   trl: number // Tech Readiness Level 1-9
@@ -231,6 +232,22 @@ interface TaskProgress {
   [key: string]: boolean
 }
 
+// The plan's two halves: the roadmap (phases, team, process) and the tech plan.
+const splitPlan = (plan: Plan) => ({
+  stage3: {
+    timelineFit: plan.timelineFit,
+    projectMilestones: plan.projectMilestones,
+    teamRoles: plan.teamRoles,
+    sdlcMapping: plan.sdlcMapping,
+    qaApproach: plan.qaApproach,
+  },
+  stage4: {
+    techRoadmap: plan.techRoadmap,
+    versionMilestones: plan.versionMilestones,
+    securityConsiderations: plan.securityConsiderations,
+    costEstimates: plan.costEstimates,
+  },
+})
 
 export default function AnalysisPage() {
   // 🚀 STAGED ANALYSIS STATE
@@ -245,6 +262,8 @@ export default function AnalysisPage() {
       analysis?: AnalysisData
     }
     stage3?: {
+      // Whether the must-have scope fits the time the builder has (older plans lack it)
+      timelineFit?: { verdict: "fits" | "tight" | "too much"; note: string }
       projectMilestones: ProjectMilestone[]
       teamRoles: TeamRole[]
       sdlcMapping: string
@@ -310,7 +329,19 @@ export default function AnalysisPage() {
       const savedStages = localStorage.getItem("stageData")
       if (savedStages) {
         const stages = JSON.parse(savedStages)
-        if (stages && typeof stages === "object") setStageData(prev => ({ ...prev, ...stages }))
+        if (stages && typeof stages === "object") {
+          // A plan saved by an older version may be missing fields; drop it so it is made again
+          if (stages.stage3 || stages.stage4) {
+            const plan = planSchema.safeParse({ ...stages.stage3, ...stages.stage4 })
+            if (plan.success) Object.assign(stages, splitPlan(plan.data))
+            else {
+              delete stages.stage3
+              delete stages.stage4
+              delete stages.stage5
+            }
+          }
+          setStageData(prev => ({ ...prev, ...stages }))
+        }
       }
       const savedInput = localStorage.getItem("evaluationInput")
       if (savedInput) {
@@ -626,46 +657,52 @@ export default function AnalysisPage() {
     }))
   }
 
-  // The plan's two halves: the roadmap (milestones, team, process) and the tech plan.
-  const splitPlan = (data: any) => ({
-    stage3: {
-      projectMilestones: data.projectMilestones,
-      teamRoles: data.teamRoles,
-      sdlcMapping: data.sdlcMapping,
-      qaApproach: data.qaApproach,
-    },
-    stage4: {
-      techRoadmap: data.techRoadmap,
-      versionMilestones: data.versionMilestones,
-      securityConsiderations: data.securityConsiderations,
-      costEstimates: data.costEstimates,
-    },
-  })
-
-  const fetchPlan = () =>
-    fetchWithFallback(
-      () => fetch("/api/stage-data", {
+  // 🔥 STAGE 3: Load the plan. It gets everything the earlier pages learned, so it
+  // fits the time and experience given and agrees with the Summary's scope and stack.
+  const loadPlanData = async () => {
+    const s2 = stageData.stage2?.analysis
+    let response: Response
+    try {
+      response = await fetch("/api/stage-data", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stage: 3, analysis }),
-      }),
-      async () => ({
-        projectMilestones: generateProjectMilestones(),
-        teamRoles: generateTeamRoles(),
-        sdlcMapping: generateSDLCMapping(),
-        qaApproach: generateQAApproach(),
-        techRoadmap: generateTechRoadmap(),
-        versionMilestones: generateVersionMilestones(),
-        securityConsiderations: generateSecurityConsiderations(),
-        costEstimates: generateCostEstimates(),
-      }),
-      "Plan data"
-    )
-
-  // 🔥 STAGE 3: Load the plan (roadmap + tech plan in one request)
-  const loadPlanData = async () => {
-    const data = await fetchPlan()
-    setStageData(prev => ({ ...prev, ...splitPlan(data) }))
+        signal: AbortSignal.timeout(100_000),
+        body: JSON.stringify({
+          stage: 3,
+          idea: formData.idea,
+          projectType: formData.projectType,
+          domain: formData.domain,
+          experience: formData.experience,
+          timeline: formData.timeline,
+          clarifications: clarifications ?? [],
+          snapshot: analysis && {
+            projectTitle: analysis.projectTitle,
+            detectedDomain: analysis.detectedDomain,
+            estimatedTimeframe: analysis.estimatedTimeframe,
+            feasibilityScore: analysis.feasibilityScore,
+            recommendation: analysis.recommendation,
+          },
+          summary: s2 && {
+            feasibilityScore: s2.feasibilityScore,
+            estimatedTimeframe: s2.estimatedTimeframe,
+            requirementsScope: s2.requirementsScope,
+            techStack: s2.techStack,
+            potentialChallenges: s2.potentialChallenges,
+          },
+        }),
+      })
+    } catch (error) {
+      throw new Error(
+        error instanceof DOMException && error.name === "TimeoutError"
+          ? "Writing the plan took too long. Please try again."
+          : "Couldn't reach the server. Check your connection and try again."
+      )
+    }
+    const data = await response.json().catch(() => null)
+    if (!response.ok) throw new Error(data?.error || "The plan couldn't be written this time. Please try again.")
+    const plan = planSchema.safeParse(data)
+    if (!plan.success) throw new Error("The plan came back incomplete. Please try again.")
+    setStageData(prev => ({ ...prev, ...splitPlan(plan.data) }))
   }
 
   // 🔥 STAGE 4: Load Hand-off Data
@@ -1554,6 +1591,8 @@ export default function AnalysisPage() {
   const renderPlan = () => {
     if (!analysis || !stageData.stage3 || !stageData.stage4) return null
     const totalFte = stageData.stage3.teamRoles.reduce((sum, r) => sum + (Number(r.fteEstimate) || 0), 0)
+    const fit = stageData.stage3.timelineFit
+    const phases = stageData.stage3.projectMilestones
     const s2 = stageData.stage2?.analysis
     const scope = s2?.requirementsScope
     const stack = s2?.techStack
@@ -1568,7 +1607,27 @@ export default function AnalysisPage() {
 
     return (
       <Sheet>
-        <SheetRow marginFirstOnMobile margin={<MarginNote mark={<Tick />} title={`${stageData.stage3.projectMilestones.length} phases`}>Each phase starts when the one before it is done.</MarginNote>}>
+        <SheetRow
+          marginFirstOnMobile
+          margin={
+            fit ? (
+              <MarginNote
+                mark={fit.verdict === "fits" ? <Tick /> : fit.verdict === "tight" ? <Query /> : <Cross />}
+                title={
+                  fit.verdict === "fits"
+                    ? `Fits ${formData.timeline ? `your ${formData.timeline}` : "the time you have"}`
+                    : fit.verdict === "tight"
+                      ? "Tight for the time you have"
+                      : "More than the time you have"
+                }
+              >
+                {fit.note || `${plural(phases.length, "phase")}, each starting when the one before it is done.`}
+              </MarginNote>
+            ) : (
+              <MarginNote mark={<Tick />} title={plural(phases.length, "phase")}>Each phase starts when the one before it is done.</MarginNote>
+            )
+          }
+        >
           <h1 className="text-[1.5rem] font-semibold tracking-[-0.02em] text-ink sm:text-[1.75rem]">The plan</h1>
           <p className="mt-2 max-w-[60ch] text-[0.9375rem] text-ink-soft">What to build first, how to build it, who you need, and what to build it with.</p>
         </SheetRow>
@@ -1607,7 +1666,7 @@ export default function AnalysisPage() {
           </SheetRow>
         ) : null}
 
-        {stageData.stage3.projectMilestones.map((milestone, index) => (
+        {phases.map((milestone, index) => (
           <SheetRow
             key={index}
             marginDesktopOnly
@@ -1637,27 +1696,34 @@ export default function AnalysisPage() {
           </SheetRow>
         ))}
 
+        {stageData.stage3.sdlcMapping || stageData.stage3.qaApproach ? (
         <SheetRow>
           <div className="grid gap-8 sm:grid-cols-2">
-            <div>
-              <SheetHeading level={3}>Way of working</SheetHeading>
-              <p className="whitespace-pre-line text-[0.9375rem] leading-relaxed text-ink">{stageData.stage3.sdlcMapping}</p>
-            </div>
-            <div>
-              <SheetHeading level={3}>Testing and release</SheetHeading>
-              <p className="whitespace-pre-line text-[0.9375rem] leading-relaxed text-ink">{stageData.stage3.qaApproach}</p>
-            </div>
+            {stageData.stage3.sdlcMapping ? (
+              <div>
+                <SheetHeading level={3}>Way of working</SheetHeading>
+                <p className="whitespace-pre-line text-[0.9375rem] leading-relaxed text-ink">{stageData.stage3.sdlcMapping}</p>
+              </div>
+            ) : null}
+            {stageData.stage3.qaApproach ? (
+              <div>
+                <SheetHeading level={3}>Testing and release</SheetHeading>
+                <p className="whitespace-pre-line text-[0.9375rem] leading-relaxed text-ink">{stageData.stage3.qaApproach}</p>
+              </div>
+            ) : null}
           </div>
         </SheetRow>
+        ) : null}
 
+        {stageData.stage3.teamRoles.length > 0 ? (
         <SheetRow
           margin={
             <div>
               <p className="font-hand text-[1.6rem] font-bold leading-none text-marker tabular">{totalFte.toFixed(1)} FTE</p>
               <p className="mt-2 text-meta text-pencil">
-                {totalFte > 2
-                  ? "More than two people working full time. A student team will need to cut scope or stretch the timeline."
-                  : "Full-time people in total. For a student team, treat this as share of effort."}
+                {totalFte > 1.5
+                  ? "More than one person can give. Find help, cut scope, or stretch the timeline."
+                  : "Share of one person's full time, across all the roles below."}
               </p>
             </div>
           }
@@ -1691,6 +1757,7 @@ export default function AnalysisPage() {
             </table>
           </div>
         </SheetRow>
+        ) : null}
 
         {stackGroups.length > 0 ? (
           <SheetRow
@@ -1784,6 +1851,7 @@ export default function AnalysisPage() {
           </ol>
         </SheetRow>
 
+        {stageData.stage4.securityConsiderations.length > 0 ? (
         <SheetRow
           margin={(() => {
             const reqs = stageData.stage4.securityConsiderations.reduce((n, c) => n + c.requirements.length, 0)
@@ -1816,7 +1884,9 @@ export default function AnalysisPage() {
             ))}
           </ul>
         </SheetRow>
+        ) : null}
 
+        {stageData.stage4.costEstimates.length > 0 ? (
         <SheetRow
           margin={
             <div className="space-y-3">
@@ -1851,6 +1921,7 @@ export default function AnalysisPage() {
             ))}
           </div>
         </SheetRow>
+        ) : null}
 
         <SheetRow
           marginLabel="Next"
@@ -2050,252 +2121,6 @@ export default function AnalysisPage() {
   }
 
   // 🔥 STAGE DATA GENERATORS
-  const generateProjectMilestones = (): ProjectMilestone[] => {
-    const ideaText = formData.idea || analysis?.projectDescription || ""
-    const isApp = ideaText.toLowerCase().includes('app') || ideaText.toLowerCase().includes('mobile')
-    const isWeb = ideaText.toLowerCase().includes('web') || ideaText.toLowerCase().includes('website')
-    const isAI = ideaText.toLowerCase().includes('ai') || ideaText.toLowerCase().includes('machine learning')
-    
-    const baseDeliverables = {
-      initiation: ["Project charter", "Stakeholder analysis", "Initial requirements", "Market research"],
-      planning: ["Detailed requirements", "Technical architecture", "UI/UX design", "Development plan"],
-      execution: ["MVP development", "Core features", "Testing & QA", "Beta user feedback"],
-      launch: ["Production deployment", "User onboarding", "Marketing launch", "Performance monitoring"]
-    }
-
-    // Customize deliverables based on project type
-    if (isApp) {
-      baseDeliverables.planning.push("Mobile app wireframes", "App store requirements")
-      baseDeliverables.execution.push("App store submission", "Device testing")
-    }
-    
-    if (isWeb) {
-      baseDeliverables.planning.push("Web hosting setup", "SEO strategy")
-      baseDeliverables.execution.push("Responsive design", "Browser compatibility testing")
-    }
-    
-    if (isAI) {
-      baseDeliverables.planning.push("Data collection strategy", "Model architecture design")
-      baseDeliverables.execution.push("Model training", "Performance optimization")
-    }
-
-    return [
-      {
-        phase: "Project Initiation",
-        deliverables: baseDeliverables.initiation,
-        duration: "1-2 weeks",
-        dependencies: []
-      },
-      {
-        phase: "Planning & Design",
-        deliverables: baseDeliverables.planning,
-        duration: "2-4 weeks",
-        dependencies: ["Project Initiation"]
-      },
-      {
-        phase: "Development & Testing",
-        deliverables: baseDeliverables.execution,
-        duration: "6-10 weeks",
-        dependencies: ["Planning & Design"]
-      },
-      {
-        phase: "Launch & Deployment",
-        deliverables: baseDeliverables.launch,
-        duration: "1-2 weeks",
-        dependencies: ["Development & Testing"]
-      }
-    ]
-  }
-
-  const generateTeamRoles = (): TeamRole[] => {
-    const ideaText = formData.idea || analysis?.projectDescription || ""
-    const isApp = ideaText.toLowerCase().includes('app') || ideaText.toLowerCase().includes('mobile')
-    const isWeb = ideaText.toLowerCase().includes('web') || ideaText.toLowerCase().includes('website')
-    const isAI = ideaText.toLowerCase().includes('ai') || ideaText.toLowerCase().includes('machine learning')
-    const isEcommerce = ideaText.toLowerCase().includes('ecommerce') || ideaText.toLowerCase().includes('marketplace') || ideaText.toLowerCase().includes('shop')
-    
-    const baseRoles = [
-      {
-        role: "Project Manager",
-        fteEstimate: 0.5,
-        skills: ["Agile", "Stakeholder management", "Risk assessment"],
-        description: "Oversees project timeline, coordinates team, manages stakeholders"
-      },
-      {
-        role: "Frontend Developer",
-        fteEstimate: 1,
-        skills: ["React", "TypeScript", "CSS", "Responsive design"],
-        description: "Responsible for user interface and user experience development"
-      },
-      {
-        role: "Backend Developer",
-        fteEstimate: 1,
-        skills: ["Node.js", "Database design", "API development", "Security"],
-        description: "Handles server-side logic, database, and API development"
-      },
-      {
-        role: "UI/UX Designer",
-        fteEstimate: 0.5,
-        skills: ["Figma", "User research", "Prototyping", "Design systems"],
-        description: "Creates user-centered designs and ensures optimal user experience"
-      }
-    ]
-
-    // Add specialized roles based on project type
-    if (isApp) {
-      baseRoles.push({
-        role: "Mobile Developer",
-        fteEstimate: 1,
-        skills: ["React Native", "iOS/Android", "App Store deployment"],
-        description: "Specializes in mobile app development and platform-specific features"
-      })
-    }
-    
-    if (isAI) {
-      baseRoles.push({
-        role: "ML Engineer",
-        fteEstimate: 1,
-        skills: ["Python", "TensorFlow", "Data preprocessing", "Model optimization"],
-        description: "Develops and optimizes machine learning models and algorithms"
-      })
-    }
-    
-    if (isEcommerce) {
-      baseRoles.push({
-        role: "E-commerce Specialist",
-        fteEstimate: 0.5,
-        skills: ["Payment integration", "Inventory management", "Analytics"],
-        description: "Handles e-commerce specific features and business logic"
-      })
-    }
-
-    // Always add QA role for larger projects
-    baseRoles.push({
-      role: "QA Engineer",
-      fteEstimate: 0.5,
-      skills: ["Test automation", "Manual testing", "Bug tracking", "Performance testing"],
-      description: "Ensures product quality through comprehensive testing strategies"
-    })
-
-    return baseRoles
-  }
-
-  const generateSDLCMapping = (): string => {
-    const ideaText = formData.idea || analysis?.projectDescription || ""
-    const isComplex = ideaText.toLowerCase().includes('ai') || ideaText.toLowerCase().includes('enterprise') || ideaText.toLowerCase().includes('large scale')
-    const isStartup = ideaText.toLowerCase().includes('startup') || ideaText.toLowerCase().includes('mvp') || ideaText.toLowerCase().includes('prototype')
-    
-    if (isComplex) {
-      return "Hybrid Agile-Waterfall approach with 3-week sprints, detailed documentation requirements, comprehensive testing phases, and milestone-based reviews for complex system integration"
-    }
-    
-    if (isStartup) {
-      return "Lean Startup methodology with rapid prototyping, 1-week sprints, continuous user feedback, pivot-ready architecture, and MVP-focused development cycles"
-    }
-    
-    return "Agile Scrum methodology with 2-week sprints, daily standups, sprint retrospectives, continuous integration, and regular stakeholder demonstrations"
-  }
-
-  const generateQAApproach = (): string => {
-    const ideaText = formData.idea || analysis?.projectDescription || ""
-    const isApp = ideaText.toLowerCase().includes('app') || ideaText.toLowerCase().includes('mobile')
-    const isAI = ideaText.toLowerCase().includes('ai') || ideaText.toLowerCase().includes('machine learning')
-    const isEcommerce = ideaText.toLowerCase().includes('ecommerce') || ideaText.toLowerCase().includes('payment')
-    
-    let qaApproach = "Comprehensive testing strategy including:\n"
-    
-    qaApproach += "• Unit testing with Jest/Vitest for component-level validation\n"
-    qaApproach += "• Integration testing for API and database interactions\n"
-    qaApproach += "• End-to-end testing with Playwright/Cypress for user workflows\n"
-    
-    if (isApp) {
-      qaApproach += "• Mobile device testing across iOS and Android platforms\n"
-      qaApproach += "• App store validation and submission testing\n"
-    }
-    
-    if (isAI) {
-      qaApproach += "• Model accuracy validation and performance benchmarking\n"
-      qaApproach += "• Data quality testing and bias detection\n"
-    }
-    
-    if (isEcommerce) {
-      qaApproach += "• Payment gateway testing and security validation\n"
-      qaApproach += "• Load testing for high-traffic scenarios\n"
-    }
-    
-    qaApproach += "• Security testing and vulnerability assessments\n"
-    qaApproach += "• Performance testing and optimization\n"
-    qaApproach += "• User acceptance testing with beta user group\n"
-    qaApproach += "• Staged deployment with blue-green deployment strategy"
-    
-    return qaApproach
-  }
-
-  const generateTechRoadmap = (): TechRoadmapItem[] => {
-    return [
-      {
-        category: "Infrastructure",
-        technologies: ["AWS/Vercel", "Docker", "CI/CD"],
-        timeline: "Week 1-2",
-        trl: 8
-      },
-      {
-        category: "Dev Stack",
-        technologies: ["React", "Node.js", "PostgreSQL"],
-        timeline: "Week 2-6",
-        trl: 9
-      }
-    ]
-  }
-
-  const generateVersionMilestones = (): VersionMilestone[] => {
-    return [
-      {
-        version: "v0.1 (MVP)",
-        features: ["Core functionality", "Basic UI", "User authentication"],
-        timeline: "Month 1-2",
-        description: "Minimum viable product for initial testing"
-      },
-      {
-        version: "v1.0 (Launch)",
-        features: ["Full feature set", "Polished UI", "Performance optimization"],
-        timeline: "Month 3-4",
-        description: "Production-ready version"
-      }
-    ]
-  }
-
-  const generateSecurityConsiderations = (): SecurityConsideration[] => {
-    return [
-      {
-        area: "Authentication",
-        requirements: ["JWT tokens", "Password hashing", "Session management"],
-        compliance: ["GDPR", "Data encryption"]
-      }
-    ]
-  }
-
-  const generateCostEstimates = (): CostEstimate[] => {
-    return [
-      {
-        category: "Development",
-        items: [
-          { name: "Developer salaries", cost: "$8,000-12,000/month", justification: "2 developers for 3-4 months" },
-          { name: "Design tools", cost: "$100-200/month", justification: "Figma Pro, Adobe Creative Suite" }
-        ],
-        total: "$25,000-50,000"
-      },
-      {
-        category: "Infrastructure",
-        items: [
-          { name: "Cloud hosting", cost: "$50-200/month", justification: "AWS/Vercel for hosting and storage" },
-          { name: "Third-party APIs", cost: "$100-500/month", justification: "Payment processing, analytics" }
-        ],
-        total: "$600-2,400/year"
-      }
-    ]
-  }
-
   const generateShareableLink = (): string => {
     const reportId = Math.random().toString(36).substring(2, 15)
     return `${window.location.origin}/shared-report/${reportId}`
