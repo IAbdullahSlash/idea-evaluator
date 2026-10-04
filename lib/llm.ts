@@ -27,7 +27,8 @@ interface Slot {
 // Gemini models in order of preference, then the Groq model used as the last resort.
 // Groq's free tier allows 1,000 requests a day but only 8,000 tokens a minute.
 const CHAINS: Record<Tier, { gemini: string[]; groq: string }> = {
-  quality: { gemini: ['gemini-3.5-flash', 'gemini-3.8-flash', 'gemini-2.5-flash'], groq: 'openai/gpt-oss-120b' },
+  // gemini-2.5-flash was removed: it now answers 404 (retired) on these keys
+  quality: { gemini: ['gemini-3.5-flash', 'gemini-3.8-flash'], groq: 'openai/gpt-oss-120b' },
   light: { gemini: ['gemini-3.5-flash-lite', 'gemini-2.5-flash-lite', 'gemini-3.1-flash-lite'], groq: 'openai/gpt-oss-20b' },
 }
 const TEMPERATURE: Record<Tier, number> = { quality: 0.4, light: 0.2 }

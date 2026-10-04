@@ -10,6 +10,7 @@ import { validateIdea } from "@/lib/validation"
 import { fetchWithFallback } from "@/lib/fetch-with-fallback"
 import { planSchema, type Plan } from "@/lib/schemas/plan"
 import { CONTEXT_QUESTIONS, missingContext } from "@/lib/schemas/context"
+import { availableWeeks, formatMoney, formatWeeks, sumCosts, totalWeeks } from "@/lib/plan-math"
 import { cn } from "@/lib/utils"
 import { CRITERIA } from "@/lib/schemas/snapshot"
 import {
@@ -233,6 +234,14 @@ interface TaskProgress {
   [key: string]: boolean
 }
 
+// Loose match between a scope feature and the plan's copy of it in scopeCuts
+const sameFeature = (a: string, b: string) => {
+  const norm = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
+  const x = norm(a)
+  const y = norm(b)
+  return Boolean(x && y) && (x === y || x.includes(y) || y.includes(x))
+}
+
 // Everything an evaluation keeps in localStorage across refreshes
 const SAVED_KEYS = ["projectAnalysis", "stageData", "evaluationInput", "currentStage", "taskProgress"]
 
@@ -240,6 +249,7 @@ const SAVED_KEYS = ["projectAnalysis", "stageData", "evaluationInput", "currentS
 const splitPlan = (plan: Plan) => ({
   stage3: {
     timelineFit: plan.timelineFit,
+    scopeCuts: plan.scopeCuts,
     projectMilestones: plan.projectMilestones,
     teamRoles: plan.teamRoles,
     sdlcMapping: plan.sdlcMapping,
@@ -268,6 +278,8 @@ export default function AnalysisPage() {
     stage3?: {
       // Whether the must-have scope fits the time the builder has (older plans lack it)
       timelineFit?: { verdict: "fits" | "tight" | "too much"; note: string }
+      // Scope features this plan leaves out to fit the time
+      scopeCuts?: string[]
       projectMilestones: ProjectMilestone[]
       teamRoles: TeamRole[]
       sdlcMapping: string
@@ -305,6 +317,9 @@ export default function AnalysisPage() {
   const [analyzing, setAnalyzing] = useState(false)
   // Why the last attempt to mark the idea failed, shown on the page with a retry
   const [analyzeError, setAnalyzeError] = useState<string | null>(null)
+  // Remaking the plan from the Plan page, and why it failed
+  const [remakingPlan, setRemakingPlan] = useState(false)
+  const [planError, setPlanError] = useState<string | null>(null)
   // Set once the idea is submitted, so unanswered questions are only flagged after a try
   const [showMissing, setShowMissing] = useState(false)
   // Why the next page failed to load, shown under its Continue button
@@ -684,7 +699,7 @@ export default function AnalysisPage() {
 
   // 🔥 STAGE 3: Load the plan. It gets everything the earlier pages learned, so it
   // fits the time and experience given and agrees with the Summary's scope and stack.
-  const loadPlanData = async () => {
+  const loadPlanData = async ({ fresh = false } = {}) => {
     const s2 = stageData.stage2?.analysis
     let response: Response
     try {
@@ -694,6 +709,7 @@ export default function AnalysisPage() {
         signal: AbortSignal.timeout(100_000),
         body: JSON.stringify({
           stage: 3,
+          fresh,
           idea: formData.idea,
           projectType: formData.projectType,
           domain: formData.domain,
@@ -728,6 +744,19 @@ export default function AnalysisPage() {
     const plan = planSchema.safeParse(data)
     if (!plan.success) throw new Error("The plan came back incomplete. Please try again.")
     setStageData(prev => ({ ...prev, ...splitPlan(plan.data) }))
+  }
+
+  // "Make a new plan": asks again without the cached reply; the current plan stays until the new one arrives
+  const remakePlan = async () => {
+    setRemakingPlan(true)
+    setPlanError(null)
+    try {
+      await loadPlanData({ fresh: true })
+    } catch (error) {
+      setPlanError(error instanceof Error && error.message ? error.message : "The plan couldn't be written this time. Please try again.")
+    } finally {
+      setRemakingPlan(false)
+    }
   }
 
   // 🔥 STAGE 4: Load Hand-off Data
@@ -1572,37 +1601,61 @@ export default function AnalysisPage() {
     const phases = stageData.stage3.projectMilestones
     const s2 = stageData.stage2?.analysis
     const scope = s2?.requirementsScope
-    const stack = s2?.techStack
-    const stackGroups = stack
-      ? ([
-          ["Frontend", stack.frontend],
-          ["Backend", stack.backend],
-          ["Database", stack.database],
-          ["Tools", stack.tools],
-        ] as const).filter(([, items]) => items && items.length > 0)
-      : []
+    const cuts = stageData.stage3.scopeCuts ?? []
+    const isCut = (feature: string) => cuts.some((c) => sameFeature(c, feature))
+    const scopeFeatures = [...(scope?.mustHaveFeatures ?? []), ...(scope?.niceToHaveFeatures ?? [])]
+    // Cuts the scope lists don't show (the model reworded them)
+    const otherCuts = cuts.filter((c) => !scopeFeatures.some((f) => sameFeature(c, f)))
+    const keptMustHaves = (scope?.mustHaveFeatures ?? []).filter((f) => !isCut(f)).length
+    const neededWeeks = totalWeeks(phases.map((p) => p.duration))
+    const hasWeeks = availableWeeks(formData.timeline)
+    const techCount = stageData.stage4.techRoadmap.reduce((n, t) => n + t.technologies.length, 0)
+    const unproven = stageData.stage4.techRoadmap.filter((t) => t.trl < 7)
+    const costTotals = stageData.stage4.costEstimates.map((c) => sumCosts(c.items.map((i) => i.cost)))
+    // Only when every cost could be read; otherwise the model's own totals are shown
+    const overallCost = costTotals.every(Boolean)
+      ? costTotals.reduce<{ monthly: number; oneOff: number }>(
+          (sum, c) => ({ monthly: sum.monthly + c!.monthly, oneOff: sum.oneOff + c!.oneOff }),
+          { monthly: 0, oneOff: 0 }
+        )
+      : null
 
     return (
       <Sheet>
         <SheetRow
           marginFirstOnMobile
           margin={
-            fit ? (
-              <MarginNote
-                mark={fit.verdict === "fits" ? <Tick /> : fit.verdict === "tight" ? <Query /> : <Cross />}
-                title={
-                  fit.verdict === "fits"
-                    ? `Fits ${formData.timeline ? `your ${formData.timeline}` : "the time you have"}`
-                    : fit.verdict === "tight"
-                      ? "Tight for the time you have"
-                      : "More than the time you have"
-                }
-              >
-                {fit.note || `${plural(phases.length, "phase")}, each starting when the one before it is done.`}
-              </MarginNote>
-            ) : (
-              <MarginNote mark={<Tick />} title={plural(phases.length, "phase")}>Each phase starts when the one before it is done.</MarginNote>
-            )
+            <div className="space-y-4">
+              {fit ? (
+                <MarginNote
+                  mark={fit.verdict === "fits" ? <Tick /> : fit.verdict === "tight" ? <Query /> : <Cross />}
+                  title={
+                    fit.verdict === "fits"
+                      ? `Fits ${formData.timeline ? `your ${formData.timeline}` : "the time you have"}`
+                      : fit.verdict === "tight"
+                        ? "Tight for the time you have"
+                        : "More than the time you have"
+                  }
+                >
+                  {fit.note || `${plural(phases.length, "phase")}, each starting when the one before it is done.`}
+                </MarginNote>
+              ) : (
+                <MarginNote mark={<Tick />} title={plural(phases.length, "phase")}>Each phase starts when the one before it is done.</MarginNote>
+              )}
+              {neededWeeks !== null ? (
+                <p className="border-t border-rule pt-3 text-meta text-pencil tabular">
+                  {plural(phases.length, "phase")} adding up to {formatWeeks(neededWeeks)}
+                  {hasWeeks !== null ? ` of the ${formData.timeline} you have` : ""}.
+                </p>
+              ) : null}
+              <div className="space-y-2">
+                <Button variant="outline" onClick={remakePlan} disabled={remakingPlan} className="w-full justify-between">
+                  {remakingPlan ? "Writing a new plan…" : "Make a new plan"}
+                  {remakingPlan ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+                </Button>
+                {planError && !remakingPlan ? <p role="alert" className="text-meta font-medium text-marker">{planError}</p> : null}
+              </div>
+            </div>
           }
         >
           <h1 className="text-[1.5rem] font-semibold tracking-[-0.02em] text-ink sm:text-[1.75rem]">The plan</h1>
@@ -1612,12 +1665,16 @@ export default function AnalysisPage() {
         {scope && (scope.mustHaveFeatures?.length || scope.niceToHaveFeatures?.length || scope.constraints?.length) ? (
           <SheetRow
             margin={
-              (scope.mustHaveFeatures?.length || 0) > 5 ? (
+              cuts.length > 0 ? (
+                <MarginNote mark={<Cross />} title={`${plural(cuts.length, "feature")} cut to fit`}>
+                  Struck through below. Build {cuts.length === 1 ? "it" : "them"} after the first version, if users ask.
+                </MarginNote>
+              ) : (scope.mustHaveFeatures?.length || 0) > 5 ? (
                 <MarginNote mark={<Query />} title={`${scope.mustHaveFeatures?.length} must-haves is a lot`}>
                   Cut to the five that prove the idea. The rest waits until users ask.
                 </MarginNote>
               ) : (
-                <MarginNote mark={<Tick />} title={`${plural(scope.mustHaveFeatures?.length || 0, "must-have")}`}>
+                <MarginNote mark={<Tick />} title={`${plural(keptMustHaves, "must-have")}`}>
                   A buildable core. Everything else waits until users ask for it.
                 </MarginNote>
               )
@@ -1633,13 +1690,26 @@ export default function AnalysisPage() {
                 <div key={label}>
                   <p className="label-caps">{label}</p>
                   <ul className="mt-2 space-y-1.5 text-[0.9375rem] text-ink">
-                    {(items || []).map((item, i) => (
-                      <li key={i} className="flex gap-2"><span className="text-pencil">–</span><span>{item}</span></li>
-                    ))}
+                    {(items || []).map((item, i) =>
+                      label !== "Constraints" && isCut(item) ? (
+                        <li key={i} className="flex gap-2 text-pencil">
+                          <span>–</span>
+                          <span><s>{item}</s> <span className="text-meta font-medium text-marker">cut</span></span>
+                        </li>
+                      ) : (
+                        <li key={i} className="flex gap-2"><span className="text-pencil">–</span><span>{item}</span></li>
+                      )
+                    )}
                   </ul>
                 </div>
               ))}
             </div>
+            {otherCuts.length > 0 ? (
+              <p className="mt-5 text-sm text-ink-soft">
+                <span className="font-semibold text-ink">Also left out: </span>
+                {otherCuts.join("; ")}
+              </p>
+            ) : null}
           </SheetRow>
         ) : null}
 
@@ -1736,65 +1806,42 @@ export default function AnalysisPage() {
         </SheetRow>
         ) : null}
 
-        {stackGroups.length > 0 ? (
-          <SheetRow
-            margin={(() => {
-              const total = stackGroups.reduce((n, [, items]) => n + items.length, 0)
-              return total > 10 ? (
-                <MarginNote mark={<Query />} title={`${total} technologies`}>A lot to learn at once. Drop anything you haven&apos;t used before unless it is essential.</MarginNote>
-              ) : (
-                <MarginNote mark={<Tick />} title={`${total} technologies`}>A manageable stack to learn and build with.</MarginNote>
-              )
-            })()}
-          >
-            <SheetHeading>Suggested stack</SheetHeading>
-            <dl className="grid gap-4 sm:grid-cols-2">
-              {stackGroups.map(([label, items]) => (
-                <div key={label}>
-                  <dt className="label-caps">{label}</dt>
-                  <dd className="mt-2 flex flex-wrap gap-1.5">
-                    {items.map((t, i) => <Chip key={i}>{t}</Chip>)}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          </SheetRow>
-        ) : null}
-
         <SheetRow
-          margin={(() => {
-            const unproven = stageData.stage4.techRoadmap.filter((t) => t.trl < 7).length
-            return unproven > 0 ? (
-              <MarginNote mark={<Cross />} title={`${plural(unproven, "layer")} below 7`}>Budget time for research and a fallback.</MarginNote>
+          margin={
+            unproven.length > 0 ? (
+              <MarginNote mark={<Cross />} title={`${plural(unproven.length, "unproven layer")}`}>
+                {unproven.map((t) => t.category).join(", ")} {unproven.length === 1 ? "isn't" : "aren't"} established yet. Budget time to try it early, and have a fallback.
+              </MarginNote>
+            ) : techCount > 10 ? (
+              <MarginNote mark={<Query />} title={`${techCount} technologies`}>A lot to learn at once. Drop anything you haven&apos;t used before unless it is essential.</MarginNote>
             ) : (
-              <MarginNote mark={<Tick />} title="All proven">Every layer is established technology.</MarginNote>
+              <MarginNote mark={<Tick />} title={`${techCount} technologies`}>A manageable stack to learn and build with.</MarginNote>
             )
-          })()}
+          }
         >
-          <SheetHeading aside="Readiness 1–9: 9 is proven in production">Technology layers</SheetHeading>
+          <SheetHeading>Stack</SheetHeading>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[34rem] border-collapse text-left text-[0.9375rem]">
+            <table className="w-full min-w-[30rem] border-collapse text-left text-[0.9375rem]">
               <thead>
                 <tr className="border-b border-rule">
                   <th scope="col" className="label-caps py-2 pr-4 font-semibold">Layer</th>
                   <th scope="col" className="label-caps py-2 pr-4 font-semibold">Technologies</th>
-                  <th scope="col" className="label-caps py-2 pr-4 font-semibold">When</th>
-                  <th scope="col" className="label-caps py-2 text-right font-semibold">Readiness</th>
+                  <th scope="col" className="label-caps py-2 font-semibold">When</th>
                 </tr>
               </thead>
               <tbody>
                 {stageData.stage4.techRoadmap.map((item, index) => (
                   <tr key={index} className="border-b border-rule align-top last:border-b-0">
-                    <td className="py-3 pr-4 font-semibold text-ink">{item.category}</td>
+                    <td className="py-3 pr-4">
+                      <p className="font-semibold text-ink">{item.category}</p>
+                      {item.trl < 7 ? <p className="text-meta font-medium text-marker">Unproven</p> : null}
+                    </td>
                     <td className="py-3 pr-4">
                       <div className="flex flex-wrap gap-1.5">
                         {item.technologies.map((tech, idx) => <Chip key={idx}>{tech}</Chip>)}
                       </div>
                     </td>
-                    <td className="py-3 pr-4 text-sm text-ink-soft">{item.timeline}</td>
-                    <td className={cn("py-3 text-right font-mono text-sm tabular", item.trl < 7 ? "text-marker" : "text-ink")}>
-                      {item.trl}/9
-                    </td>
+                    <td className="py-3 text-sm text-ink-soft">{item.timeline}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1866,21 +1913,32 @@ export default function AnalysisPage() {
         {stageData.stage4.costEstimates.length > 0 ? (
         <SheetRow
           margin={
-            <div className="space-y-3">
-              {stageData.stage4.costEstimates.map((c, i) => (
-                <div key={i}>
-                  <p className="text-meta text-pencil">{c.category}</p>
-                  <p className="font-hand text-[1.4rem] font-bold leading-tight text-marker tabular">{c.total}</p>
-                </div>
-              ))}
-            </div>
+            overallCost ? (
+              <div>
+                <p className="text-meta text-pencil">Total to run it</p>
+                <p className="font-hand text-[1.6rem] font-bold leading-tight text-marker tabular">{formatMoney(overallCost)}</p>
+                <p className="mt-2 text-meta text-pencil">Added up from the costs listed, at the start. Paid tiers come later.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {stageData.stage4.costEstimates.map((c, i) => (
+                  <div key={i}>
+                    <p className="text-meta text-pencil">{c.category}</p>
+                    <p className="font-hand text-[1.4rem] font-bold leading-tight text-marker tabular">{c.total}</p>
+                  </div>
+                ))}
+              </div>
+            )
           }
         >
           <SheetHeading>Costs</SheetHeading>
           <div className="space-y-6">
             {stageData.stage4.costEstimates.map((category, index) => (
               <div key={index}>
-                <p className="label-caps">{category.category}</p>
+                <p className="flex items-baseline justify-between gap-3">
+                  <span className="label-caps">{category.category}</span>
+                  <span className="font-mono text-meta text-pencil tabular">{costTotals[index] ? formatMoney(costTotals[index]!) : category.total}</span>
+                </p>
                 <table className="mt-2 w-full border-collapse text-left text-[0.9375rem]">
                   <tbody>
                     {category.items.map((item, idx) => (

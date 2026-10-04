@@ -72,6 +72,8 @@ export const planSchema = z.object({
     .object({ verdict: z.enum(TIMELINE_FIT), note: optionalText })
     .optional()
     .catch(undefined),
+  // Features from the Summary's scope that this plan leaves out to fit the time
+  scopeCuts: texts,
   projectMilestones: listOf(milestone).refine((l) => l.length > 0, 'No phases'),
   teamRoles: listOf(teamRole),
   sdlcMapping: optionalText,
