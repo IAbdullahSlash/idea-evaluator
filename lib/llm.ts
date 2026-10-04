@@ -64,17 +64,22 @@ function slotsFor(tier: Tier): Slot[] {
 
 // ── cooldowns ───────────────────────────────────────────────────────────
 
+// Keyed by slot id, or by model (`model:<provider>:<model>`) when the problem is
+// the model itself and every key would hit it too.
 const parkedUntil = new Map<string, { until: number; reason: string }>()
+const modelId = (slot: Slot) => `model:${slot.provider}:${slot.model}`
 
-function isParked(slot: Slot): boolean {
-  const p = parkedUntil.get(slot.id)
-  if (!p) return false
-  if (p.until <= Date.now()) {
-    parkedUntil.delete(slot.id)
-    return false
+function parkedEntry(id: string) {
+  const p = parkedUntil.get(id)
+  if (p && p.until <= Date.now()) {
+    parkedUntil.delete(id)
+    return undefined
   }
-  return true
+  return p
 }
+
+const parkedFor = (slot: Slot) => parkedEntry(modelId(slot)) ?? parkedEntry(slot.id)
+const isParked = (slot: Slot) => Boolean(parkedFor(slot))
 
 /** Decide how long to skip a slot from the error it returned. */
 function park(slot: Slot, error: unknown): void {
@@ -84,6 +89,9 @@ function park(slot: Slot, error: unknown): void {
 
   let ms: number
   let reason: string
+  // Quotas and rejected keys belong to one key; overload and a missing model
+  // affect the model on every key, so the other keys are skipped too.
+  let wholeModel = false
   if (status === 429 || /quota|rate limit/i.test(message)) {
     const daily = /PerDay/i.test(message)
     ms = Number.isFinite(retrySeconds) && retrySeconds > 0 ? retrySeconds * 1000 : daily ? 60 * 60 * 1000 : 60 * 1000
@@ -91,16 +99,22 @@ function park(slot: Slot, error: unknown): void {
   } else if (status === 503 || /overloaded|high demand|unavailable/i.test(message)) {
     ms = 30 * 1000
     reason = 'overloaded'
+    wholeModel = true
+  } else if (status === 404 || /not found|is not supported/i.test(message)) {
+    ms = 60 * 60 * 1000
+    reason = 'model not available'
+    wholeModel = true
   } else if (/timeout|aborted/i.test(message)) {
     ms = 15 * 1000
     reason = 'timed out'
+    wholeModel = true
   } else if (status === 401 || status === 403 || /API key not valid|permission/i.test(message)) {
     ms = 60 * 60 * 1000
     reason = 'key rejected'
   } else {
     return // a bad prompt or reply: not the slot's fault
   }
-  parkedUntil.set(slot.id, { until: Date.now() + ms, reason })
+  parkedUntil.set(wholeModel ? modelId(slot) : slot.id, { until: Date.now() + ms, reason })
 }
 
 // ── providers ───────────────────────────────────────────────────────────
@@ -216,7 +230,7 @@ function tierStatus() {
   return (['quality', 'light'] as Tier[]).map((tier) => ({
     tier,
     slots: slotsFor(tier).map((slot) => {
-      const parked = isParked(slot) ? parkedUntil.get(slot.id) : undefined
+      const parked = parkedFor(slot)
       return {
         slot: slot.id,
         status: parked ? 'parked' : 'available',

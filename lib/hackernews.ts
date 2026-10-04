@@ -36,31 +36,37 @@ const decode = (html: string) =>
 
 const clip = (text: string, max: number) => (text.length > max ? `${text.slice(0, max).trimEnd()}…` : text)
 
+// Words that only add noise to a title search
+const STOP_WORDS = new Set(['a', 'an', 'and', 'the', 'for', 'of', 'to', 'in', 'on', 'with', 'by', 'my', 'your', 'that', 'app', 'tool'])
+
 /**
- * Stories with real discussion that match the query. Algolia requires every
- * word to match, so if nothing comes back the last word is dropped and the
- * search tried again (down to two words).
+ * Stories with real discussion that match the query. Only titles are searched,
+ * without typo or prefix matching (otherwise "planner" also finds "planets").
+ * Every word is optional, so titles matching the most words rank first and a
+ * long query still finds something.
  */
 export async function searchStories(query: string, limit = 10): Promise<Omit<HnThread, 'comments'>[]> {
-  let words = query.trim().split(/\s+/).filter(Boolean).slice(0, 5)
-  while (words.length > 0) {
-    const data = await getJson(
-      `${API}/search?query=${encodeURIComponent(words.join(' '))}&tags=story&numericFilters=num_comments%3E3&hitsPerPage=${limit}`
-    )
-    const hits = (data?.hits || []).filter((h: any) => h.title)
-    if (hits.length > 0 || words.length <= 2) {
-      return hits.map((h: any) => ({
-        id: String(h.objectID),
-        title: h.title,
-        url: `https://news.ycombinator.com/item?id=${h.objectID}`,
-        points: h.points ?? 0,
-        numComments: h.num_comments ?? 0,
-        createdAt: h.created_at ?? '',
-      }))
-    }
-    words = words.slice(0, -1)
-  }
-  return []
+  const words = query
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}+#.-]+/u)
+    .filter((w) => w && !STOP_WORDS.has(w))
+    .slice(0, 5)
+  if (words.length === 0) return []
+  const q = encodeURIComponent(words.join(' '))
+  const data = await getJson(
+    `${API}/search?query=${q}&optionalWords=${q}&tags=story&restrictSearchableAttributes=title` +
+      `&typoTolerance=false&queryType=prefixNone&numericFilters=num_comments%3E3&hitsPerPage=${limit}`
+  )
+  return (data?.hits || [])
+    .filter((h: any) => h.title)
+    .map((h: any) => ({
+      id: String(h.objectID),
+      title: h.title,
+      url: `https://news.ycombinator.com/item?id=${h.objectID}`,
+      points: h.points ?? 0,
+      numComments: h.num_comments ?? 0,
+      createdAt: h.created_at ?? '',
+    }))
 }
 
 const FIREBASE = 'https://hacker-news.firebaseio.com/v0'

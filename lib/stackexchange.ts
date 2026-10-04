@@ -51,11 +51,16 @@ const decode = (html: string) =>
 const clip = (text: string, max: number) => (text.length > max ? `${text.slice(0, max).trimEnd()}…` : text)
 
 async function searchSite(site: { id: string; name: string }, query: string, perSite: number): Promise<SeThread[]> {
+  // /similar matches loosely on the title, where /search needs every word in the
+  // question and usually finds nothing for a multi-word idea. Unanswered
+  // questions are dropped afterwards, so a few extra are requested.
   const data = await getJson(
-    `${API}/search/advanced?order=desc&sort=relevance&q=${encodeURIComponent(query)}&site=${site.id}` +
-      `&answers=1&pagesize=${perSite}&filter=withbody${keyParam()}`
+    `${API}/similar?order=desc&sort=relevance&title=${encodeURIComponent(query)}&site=${site.id}` +
+      `&pagesize=${perSite * 2}&filter=withbody${keyParam()}`
   )
-  const questions = (data?.items || []).filter((q: any) => q.title && q.score >= 0)
+  const questions = (data?.items || [])
+    .filter((q: any) => q.title && q.score >= 0 && q.answer_count > 0)
+    .slice(0, perSite)
   if (questions.length === 0) return []
 
   // The top answers for all of this site's questions, in one request
