@@ -134,20 +134,33 @@ interface Clarification {
 }
 
 // A Hacker News discussion and what people said in it
+// A discussion (Hacker News or a Stack Exchange site) and what people said in it
 interface DiscussionThread {
+  source: "Hacker News" | "Stack Exchange"
+  // Where exactly: "Hacker News", or the Stack Exchange site's name
+  where: string
   title: string
   url: string
   points: number
-  numComments: number
+  replies: number
   year: number | null
   says: string | null
   topComment: string | null
+}
+
+interface NewsStory {
+  title: string
+  url: string
+  source: string
+  publishedAt: string
+  note: string | null
 }
 
 interface DiscussionResult {
   status: "ok" | "error"
   takeaway?: string | null
   threads: DiscussionThread[]
+  news?: NewsStory[]
 }
 
 interface ExistingSolution {
@@ -589,7 +602,7 @@ export default function AnalysisPage() {
     const discussionsPromise: Promise<DiscussionResult> = fetch("/api/discussions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query: discussionsQuery, idea: formData.idea }),
+      body: JSON.stringify({ query: discussionsQuery, altQuery: analysis?.shortTitle || analysis?.projectTitle, idea: formData.idea }),
     })
       .then((r) => (r.ok ? r.json() : { status: "error", threads: [] }))
       .catch(() => ({ status: "error", threads: [] }))
@@ -1341,11 +1354,17 @@ export default function AnalysisPage() {
         <SheetRow
           margin={
             !discussions || discussions.status === "error" ? (
-              <MarginNote mark={<Query />} title="Discussions unavailable">Couldn&apos;t load discussions this time.</MarginNote>
-            ) : discussions.threads.length === 0 ? (
-              <MarginNote mark={<Query />} title="No discussions found">Nobody on Hacker News has discussed this problem directly, or they phrase it differently.</MarginNote>
+              <MarginNote mark={<Query />} title="Sources unavailable">Couldn&apos;t load discussions or news this time.</MarginNote>
+            ) : discussions.threads.length === 0 && !discussions.news?.length ? (
+              <MarginNote mark={<Query />} title="Nothing found">Nobody seems to be discussing this problem online, or they phrase it differently.</MarginNote>
             ) : (
-              <MarginNote mark={<Query />} title={`${plural(discussions.threads.length, "discussion")} found`}>
+              <MarginNote
+                mark={<Query />}
+                title={[
+                  discussions.threads.length ? plural(discussions.threads.length, "discussion") : "",
+                  discussions.news?.length ? plural(discussions.news.length, "news story", "news stories") : "",
+                ].filter(Boolean).join(" · ")}
+              >
                 {discussions.takeaway || "Read what people said before you decide."}
               </MarginNote>
             )
@@ -1363,18 +1382,20 @@ export default function AnalysisPage() {
             </div>
           </dl>
 
-          <p className="label-caps mt-7">Discussions on Hacker News</p>
+          <p className="label-caps mt-7">What people are discussing</p>
           {!discussions || discussions.status === "error" ? (
             <EmptyLine>Discussions couldn&apos;t be loaded. Try again later.</EmptyLine>
           ) : discussions.threads.length === 0 ? (
-            <EmptyLine>No relevant discussions found for this idea.</EmptyLine>
+            <EmptyLine>No relevant discussions found on Hacker News or Stack Exchange.</EmptyLine>
           ) : (
             <ol className="mt-2 divide-y divide-rule">
               {discussions.threads.map((t, i) => (
                 <li key={i} className="py-4 first:pt-1 last:pb-0">
                   <LinkTitle href={t.url}>{t.title}</LinkTitle>
                   <p className="mt-0.5 text-meta text-pencil tabular">
-                    {t.points.toLocaleString()} points · {t.numComments.toLocaleString()} comments{t.year ? ` · ${t.year}` : ""}
+                    {t.where} · {t.points.toLocaleString()} {t.source === "Hacker News" ? "points" : "votes"} ·{" "}
+                    {t.replies.toLocaleString()} {t.source === "Hacker News" ? "comments" : t.replies === 1 ? "answer" : "answers"}
+                    {t.year ? ` · ${t.year}` : ""}
                   </p>
                   {t.says ? (
                     <p className="mt-1.5 max-w-[70ch] text-[0.9375rem] leading-relaxed text-ink">{t.says}</p>
@@ -1387,6 +1408,30 @@ export default function AnalysisPage() {
               ))}
             </ol>
           )}
+
+          {discussions && discussions.status === "ok" ? (
+            <>
+              <p className="label-caps mt-7">In the news</p>
+              {!discussions.news?.length ? (
+                <EmptyLine>No relevant news coverage found.</EmptyLine>
+              ) : (
+                <ul className="mt-2 divide-y divide-rule">
+                  {discussions.news.map((n, i) => (
+                    <li key={i} className="py-3 first:pt-1 last:pb-0">
+                      <LinkTitle href={n.url}>{n.title}</LinkTitle>
+                      <p className="mt-0.5 text-meta text-pencil tabular">
+                        {n.source}
+                        {n.publishedAt
+                          ? ` · ${new Date(n.publishedAt).toLocaleDateString(undefined, { month: "short", year: "numeric" })}`
+                          : ""}
+                      </p>
+                      {n.note ? <p className="mt-1 max-w-[70ch] text-sm leading-relaxed text-ink-soft">{n.note}</p> : null}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
+          ) : null}
         </SheetRow>
 
         {stageData.stage2.quickWins.length > 0 ? (

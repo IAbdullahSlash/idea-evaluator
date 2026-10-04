@@ -4,7 +4,7 @@
  */
 const contents = [
   { n: 1, page: "Snapshot", gives: "A feasibility score out of 10, your odds of finishing, difficulty, and an honest reality check." },
-  { n: 2, page: "Summary", gives: "Pros and cons, risks, what people say on Hacker News, existing projects like yours, and an executive summary." },
+  { n: 2, page: "Summary", gives: "Pros and cons, risks, what people are saying online and in the news, existing projects like yours, and an executive summary." },
   { n: 3, page: "Plan", gives: "Scope, a suggested stack, phases with deliverables, the team you need, security, and a cost estimate." },
   { n: 4, page: "Hand-off", gives: "A printable report and links to people who can help you build it." },
 ]

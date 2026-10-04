@@ -12,7 +12,7 @@ Write down a project idea and get it marked like an exam answer: a score out of 
 The evaluation runs in four stages. Each one opens only when you choose to continue, so a weak idea can stop at the first.
 
 1. **Snapshot** — A mark out of 10, worked out from six criteria (a real problem, worth solving, not already done, something new, within reach, someone wants it), each with its own mark and reason. Also a recommendation (Build / Narrow it down / Rethink / Drop), odds of success, an honest reality check, who it is for, and questions to ask yourself. If the idea is too vague to mark, it asks up to three follow-up questions first.
-2. **Summary** — Pros and cons, risks with severity, what people have said on Hacker News, quick wins, existing solutions, similar projects on GitHub, and an executive summary.
+2. **Summary** — Pros and cons, risks with severity, what people are discussing (Hacker News and Stack Exchange) and recent news coverage (Google News), quick wins, existing solutions, similar projects on GitHub, and an executive summary.
 3. **Plan** — Scope, a suggested stack, phases with deliverables, the team you need, technology layers, versions, security, and costs.
 4. **Hand-off** — A printable report and links to find people who can help build it.
 
@@ -25,7 +25,7 @@ Browser (Next.js 14 App Router)
         │
         ├─ POST /api/analyze      Snapshot and Summary (validated against a schema)
         ├─ POST /api/stage-data   Plan and Hand-off
-        ├─ POST /api/discussions  Hacker News threads, filtered and summarised
+        ├─ POST /api/discussions  Hacker News, Stack Exchange, and Google News, filtered and summarised
         ├─ POST /api/github-repos Similar repositories
         └─ POST /api/export-pdf   Printable report
                 │
@@ -45,7 +45,8 @@ Every Gemini model is tried with every configured key before moving on. A model/
 | Styling | Tailwind CSS 3, Radix UI primitives, Geist and Kalam fonts |
 | AI | Google Gemini via `@google/generative-ai`, Groq (OpenAI-compatible API) as fallback |
 | Validation | zod |
-| Discussions | Hacker News via the Algolia search API (no key needed) |
+| Discussions | Hacker News (Algolia search and the official API) and Stack Exchange (Software Recommendations, Web Applications, Academia); no keys needed |
+| News | Google News RSS search (no key needed; Google offers it for non-commercial use) |
 | Repos | GitHub search API |
 | State | localStorage (the idea, answers, and every stage survive a refresh) |
 
@@ -82,6 +83,7 @@ Open [http://localhost:3000](http://localhost:3000) and write down your idea.
 | `GEMINI_API_KEYS` | No | Alternatively, a comma-separated list of keys |
 | `GROQ_API_KEY` | No | Groq key, used when no Gemini model is available |
 | `GITHUB_TOKEN` | No | Raises the GitHub search rate limit; search works without it |
+| `STACKEXCHANGE_KEY` | No | Raises the Stack Exchange limit from 300 to 10,000 requests a day (free at stackapps.com) |
 
 A system-wide environment variable with the same name takes priority over `.env.local`.
 
@@ -98,7 +100,7 @@ app/
 └── api/
     ├── analyze/             # Snapshot and Summary
     ├── stage-data/          # Plan and Hand-off
-    ├── discussions/         # Hacker News discussions
+    ├── discussions/         # Discussions and news
     ├── github-repos/        # Similar repositories
     ├── google-search/       # Web search (needs Google Custom Search keys; not used by the UI yet)
     ├── export-pdf/          # Printable report
@@ -111,6 +113,8 @@ lib/
 ├── llm.ts                   # Multi-key, multi-model AI router
 ├── schemas/snapshot.ts      # Snapshot schema and marking criteria
 ├── hackernews.ts            # Hacker News search and comments
+├── stackexchange.ts         # Stack Exchange questions and answers
+├── news.ts                  # Google News search
 └── validation.ts            # Idea input checks shared by client and server
 ```
 

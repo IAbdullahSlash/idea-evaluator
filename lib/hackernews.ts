@@ -63,12 +63,22 @@ export async function searchStories(query: string, limit = 10): Promise<Omit<HnT
   return []
 }
 
-/** The first few top-level comments of a thread, as plain text. */
+const FIREBASE = 'https://hacker-news.firebaseio.com/v0'
+
+/**
+ * The top few comments of a thread, as plain text. Uses the official HN API,
+ * which returns comment ids in ranked order, so only those comments are fetched
+ * instead of the whole (sometimes huge) thread.
+ */
 export async function threadComments(id: string, count = 3): Promise<string[]> {
   try {
-    const item = await getJson(`${API}/items/${encodeURIComponent(id)}`)
-    return (item?.children || [])
-      .filter((c: any) => c?.text && c.author)
+    const story = await getJson(`${FIREBASE}/item/${encodeURIComponent(id)}.json`)
+    const kids: number[] = (story?.kids || []).slice(0, count + 2)
+    const comments = await Promise.all(
+      kids.map((kid) => getJson(`${FIREBASE}/item/${kid}.json`).catch(() => null))
+    )
+    return comments
+      .filter((c: any) => c?.text && !c.deleted && !c.dead)
       .slice(0, count)
       .map((c: any) => clip(decode(c.text), 400))
   } catch {
