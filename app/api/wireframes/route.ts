@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { NoModelAvailableError, forget, generateJsonWithMeta } from "@/lib/llm"
+import { failureMessage, generateChecked } from "@/lib/llm-checked"
 import { clip, evaluationContext, list } from "@/lib/evaluation-context"
 import { tidyWireframes, wireframesSchema } from "@/lib/schemas/wireframes"
 
@@ -10,7 +10,9 @@ import { tidyWireframes, wireframesSchema } from "@/lib/schemas/wireframes"
  */
 
 const WIREFRAMES_FAILED = "The wireframes couldn't be drawn this time. Please try again."
-const AI_BUSY = "The AI models have reached their limits for now. Please try again in a little while."
+
+// Vercel stops a function at this many seconds; every AI request is budgeted to finish inside it
+export const maxDuration = 60
 
 interface StoryIn {
   id: string
@@ -81,24 +83,7 @@ export async function POST(request: NextRequest) {
   }
 
   const stories = storiesFrom(body.stories)
-  const prompt = wireframesPrompt(body, stories)
-  const tried: string[] = []
-  for (let attempt = 1; attempt <= 2; attempt++) {
-    let raw: unknown
-    try {
-      const reply = await generateJsonWithMeta<unknown>(prompt, { tier: "quality", exclude: tried, cache: attempt === 1 && !body.fresh })
-      raw = reply.data
-      tried.push(reply.model.replace(" (cached)", ""))
-    } catch (error) {
-      console.error("[wireframes] Model call failed:", error instanceof Error ? error.message : error)
-      const busy = error instanceof NoModelAvailableError
-      return NextResponse.json({ error: busy ? AI_BUSY : WIREFRAMES_FAILED }, { status: busy ? 503 : 502 })
-    }
-
-    const parsed = wireframesSchema.safeParse(raw)
-    if (parsed.success) return NextResponse.json(tidyWireframes(parsed.data, stories.map((s) => s.id)))
-    console.warn(`[wireframes] Incomplete wireframes (attempt ${attempt}):`, parsed.error.issues.map((i) => i.path.join(".") || i.message).join(", "))
-    forget(prompt, "quality")
-  }
-  return NextResponse.json({ error: WIREFRAMES_FAILED }, { status: 502 })
+  const result = await generateChecked(wireframesPrompt(body, stories), wireframesSchema, { label: "wireframes", fresh: Boolean(body.fresh) })
+  if (!result.ok) return NextResponse.json({ error: failureMessage(result, WIREFRAMES_FAILED) }, { status: result.busy ? 503 : 502 })
+  return NextResponse.json(tidyWireframes(result.data, stories.map((s) => s.id)))
 }

@@ -1,4 +1,4 @@
-import { NoModelAvailableError, forget, generateJsonWithMeta } from "@/lib/llm"
+import { failureMessage, generateChecked } from "@/lib/llm-checked"
 import { planSchema, TIMELINE_FIT, type Plan } from "@/lib/schemas/plan"
 import { availableWeeks, formatWeeks, totalWeeks } from "@/lib/plan-math"
 import { evaluationContext } from "@/lib/evaluation-context"
@@ -23,7 +23,9 @@ export async function POST(request: NextRequest) {
 // ── Plan (stage 3) ──────────────────────────────────────────────────────
 
 const PLAN_FAILED = "The plan couldn't be written this time. Please try again."
-const AI_BUSY = "The AI models have reached their limits for now. Please try again in a little while."
+
+// Vercel stops a function at this many seconds; every AI request is budgeted to finish inside it
+export const maxDuration = 60
 
 function planPrompt(body: any): string {
   return `You are a senior engineer helping a developer plan a project they will build themselves, usually alone or in a small student team. Plan for that person, not for a funded company.
@@ -63,30 +65,10 @@ async function makePlan(body: any) {
     return NextResponse.json({ error: "The idea is required" }, { status: 400 })
   }
 
-  const prompt = planPrompt(body)
-  const tried: string[] = []
-  for (let attempt = 1; attempt <= 2; attempt++) {
-    let raw: unknown
-    try {
-      // "Make a new plan" skips the cached reply
-      const reply = await generateJsonWithMeta<unknown>(prompt, { tier: "quality", exclude: tried, cache: attempt === 1 && !body.fresh })
-      raw = reply.data
-      tried.push(reply.model.replace(" (cached)", ""))
-    } catch (error) {
-      console.error("[plan] Model call failed:", error instanceof Error ? error.message : error)
-      const busy = error instanceof NoModelAvailableError
-      return NextResponse.json({ error: busy ? AI_BUSY : PLAN_FAILED }, { status: busy ? 503 : 502 })
-    }
-
-    const parsed = planSchema.safeParse(raw)
-    if (parsed.success) return NextResponse.json(checkTimeline(parsed.data, body.timeline))
-    console.warn(
-      `[plan] Incomplete plan (attempt ${attempt}):`,
-      parsed.error.issues.map((i) => i.path.join(".") || i.message).join(", ")
-    )
-    forget(prompt, "quality")
-  }
-  return NextResponse.json({ error: PLAN_FAILED }, { status: 502 })
+  // "Make a new plan" skips the cached reply
+  const result = await generateChecked(planPrompt(body), planSchema, { label: "plan", fresh: Boolean(body.fresh) })
+  if (!result.ok) return NextResponse.json({ error: failureMessage(result, PLAN_FAILED) }, { status: result.busy ? 503 : 502 })
+  return NextResponse.json(checkTimeline(result.data, body.timeline))
 }
 
 /**

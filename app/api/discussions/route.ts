@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server'
 import { searchStories, threadComments } from '@/lib/hackernews'
 import { searchQuestions } from '@/lib/stackexchange'
 import { searchNews } from '@/lib/news'
-import { generateJson } from '@/lib/llm'
+import { DEFAULT_BUDGET_MS, generateJson } from '@/lib/llm'
 
 /**
  * POST { query, altQuery?, idea } → what people are saying about the idea's problem:
@@ -15,6 +15,9 @@ import { generateJson } from '@/lib/llm'
  * model call picks the relevant ones and summarises them.
  */
 const HN_CANDIDATES = 5
+
+// Vercel stops a function at this many seconds; every AI request is budgeted to finish inside it
+export const maxDuration = 60
 
 // The model scores every item 0-3 for relevance; only 2 and 3 are shown.
 const MIN_RELEVANCE = 2
@@ -48,6 +51,8 @@ interface Candidate {
 }
 
 export async function POST(request: NextRequest) {
+  // The searches and the review share the function's time
+  const deadline = Date.now() + DEFAULT_BUDGET_MS
   let query = ''
   let altQuery = ''
   let idea = ''
@@ -147,7 +152,7 @@ For each discussion, also write one or two plain sentences on what people said t
 Finally, write one sentence on what the items scored 2 or 3 together mean for the idea, or an empty string if none scored 2 or more.
 
 Respond with ONLY valid JSON: { "discussions": [ { "id": "hn-123", "relevance": 0, "says": "..." } ], "news": [ { "index": 0, "relevance": 0, "note": "..." } ], "takeaway": "..." }`,
-      { tier: 'light' }
+      { tier: 'light', deadline }
     )
   } catch (error) {
     console.error('[discussions] Review failed:', error instanceof Error ? error.message : error)

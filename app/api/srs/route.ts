@@ -1,20 +1,24 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { clip, evaluationContext, list } from "@/lib/evaluation-context"
-import { generateChecked } from "@/lib/llm-checked"
-import { PRIORITIES, srsFeaturesSchema, srsOverviewSchema, srsQualitySchema, tidySrs } from "@/lib/schemas/srs"
+import { failureMessage, generateChecked } from "@/lib/llm-checked"
+import { PRIORITIES, srsFeaturesSchema, srsOverviewSchema, srsQualitySchema } from "@/lib/schemas/srs"
 
 /**
- * POST { idea, …context, snapshot, summary, plan, stories, screens } → a
- * detailed software requirements specification (IEEE 830 / ISO 29148).
+ * POST { part, idea, …context, snapshot, summary, plan, stories, screens } →
+ * one part of a detailed software requirements specification (IEEE 830 /
+ * ISO 29148): "overview" (introduction, overall description, interfaces),
+ * "features" (system features and functional requirements), or "quality"
+ * (non-functional requirements, data model, open questions).
  *
- * Written in three parts at once, each checked on its own: the overview and
- * interfaces, the system features with their functional requirements, and the
- * quality requirements with the data model. Requirements cite the story map's
- * IDs and the wireframes' screens, which feed the traceability appendix.
+ * The page asks for the three parts at once, in separate requests so each gets
+ * its own function time, then puts them together and traces the requirements
+ * to the story map's IDs and the wireframes' screens.
  */
 
 const SRS_FAILED = "The requirements document couldn't be written this time. Please try again."
-const AI_BUSY = "The AI models have reached their limits for now. Please try again in a little while."
+
+// Vercel stops a function at this many seconds; every AI request is budgeted to finish inside it
+export const maxDuration = 60
 
 interface Inputs {
   stories: { id: string; title: string; release: string }[]
@@ -158,17 +162,16 @@ export async function POST(request: NextRequest) {
 
   const inputs = inputsFrom(body)
   const context = sharedContext(body, inputs)
-  const fresh = Boolean(body.fresh)
-  const [overview, features, quality] = await Promise.all([
-    generateChecked(overviewPrompt(context), srsOverviewSchema, { label: "srs:overview", fresh }),
-    generateChecked(featuresPrompt(context, inputs), srsFeaturesSchema, { label: "srs:features", fresh }),
-    generateChecked(qualityPrompt(context), srsQualitySchema, { label: "srs:quality", fresh }),
-  ])
-  if (!overview.ok || !features.ok || !quality.ok) {
-    const busy = [overview, features, quality].some((p) => !p.ok && p.busy)
-    return NextResponse.json({ error: busy ? AI_BUSY : SRS_FAILED }, { status: busy ? 503 : 502 })
-  }
-
-  const srs = { overview: overview.data, features: features.data.features, quality: quality.data }
-  return NextResponse.json(tidySrs(srs, inputs.stories.map((s) => s.id), inputs.screens.map((s) => s.name)))
+  const options = { label: `srs:${body.part}`, fresh: Boolean(body.fresh) }
+  const result =
+    body.part === "overview"
+      ? await generateChecked(overviewPrompt(context), srsOverviewSchema, options)
+      : body.part === "features"
+        ? await generateChecked(featuresPrompt(context, inputs), srsFeaturesSchema, options)
+        : body.part === "quality"
+          ? await generateChecked(qualityPrompt(context), srsQualitySchema, options)
+          : null
+  if (!result) return NextResponse.json({ error: "Unknown part" }, { status: 400 })
+  if (!result.ok) return NextResponse.json({ error: failureMessage(result, SRS_FAILED) }, { status: result.busy ? 503 : 502 })
+  return NextResponse.json(result.data)
 }

@@ -10,7 +10,7 @@ import { validateIdea } from "@/lib/validation"
 import { buildReport } from "@/lib/documents/report"
 import { buildSrsDocument } from "@/lib/documents/srs"
 import { downloadText, fileSlug, hireLinks, jiraCsv, openHtml } from "@/lib/handoff"
-import { numberRequirements, srsSchema, type Srs } from "@/lib/schemas/srs"
+import { numberRequirements, srsFeaturesSchema, srsOverviewSchema, srsQualitySchema, srsSchema, tidySrs, type Srs } from "@/lib/schemas/srs"
 import { briefSchema, numberStories, type Brief } from "@/lib/schemas/brief"
 import { wireframesSchema, type Wireframes } from "@/lib/schemas/wireframes"
 import { planSchema, type Plan } from "@/lib/schemas/plan"
@@ -236,12 +236,47 @@ interface GitHubRepo {
 
 // The documents the Hand-off page writes on request, and where
 type HandOffDoc = "brief" | "wireframes" | "srs"
-// The SRS is three model calls at once, so it gets longer to finish
 const HAND_OFF_DOCS = {
-  brief: { url: "/api/brief", schema: briefSchema, name: "product vision and story map", timeoutMs: 100_000, wait: "up to a minute" },
-  wireframes: { url: "/api/wireframes", schema: wireframesSchema, name: "wireframes", timeoutMs: 100_000, wait: "up to a minute" },
-  srs: { url: "/api/srs", schema: srsSchema, name: "requirements document", timeoutMs: 180_000, wait: "a minute or two" },
+  brief: { url: "/api/brief", name: "product vision and story map" },
+  wireframes: { url: "/api/wireframes", name: "wireframes" },
+  srs: { url: "/api/srs", name: "requirements document" },
 } as const
+
+// The server's AI routes stop at 60 s (Vercel's limit); a little more allows for the network
+const REQUEST_TIMEOUT_MS = 70_000
+
+class RequestError extends Error {
+  constructor(message: string, readonly retryable: boolean) {
+    super(message)
+  }
+}
+
+/** POST JSON and return the reply; server failures and timeouts are marked retryable. */
+async function postJson(url: string, body: unknown, failed: string): Promise<unknown> {
+  let response: Response
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      body: JSON.stringify(body),
+    })
+  } catch (error) {
+    throw error instanceof DOMException && error.name === "TimeoutError"
+      ? new RequestError("This took too long. Please try again.", true)
+      : new RequestError("Couldn't reach the server. Check your connection and try again.", false)
+  }
+  const data = await response.json().catch(() => null)
+  if (!response.ok) throw new RequestError((data as any)?.error || failed, response.status >= 500)
+  return data
+}
+
+// The SRS is written in three parts, each its own request with its own function time
+const SRS_PARTS = [
+  { part: "overview", schema: srsOverviewSchema },
+  { part: "features", schema: srsFeaturesSchema },
+  { part: "quality", schema: srsQualitySchema },
+] as const
 
 // Loose match between a scope feature and the plan's copy of it in scopeCuts
 const sameFeature = (a: string, b: string) => {
@@ -571,7 +606,7 @@ export default function AnalysisPage() {
     try {
       const response = await fetch("/api/analyze", {
         // The server may retry once, so allow a little over two Gemini timeouts
-        signal: AbortSignal.timeout(100_000),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -673,7 +708,7 @@ export default function AnalysisPage() {
     const summaryPromise: Promise<AnalysisData | null> = fetch("/api/analyze", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      signal: AbortSignal.timeout(100_000),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       body: JSON.stringify({
         idea: formData.idea,
         stage: 'stage2',
@@ -725,7 +760,7 @@ export default function AnalysisPage() {
       response = await fetch("/api/stage-data", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        signal: AbortSignal.timeout(100_000),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         body: JSON.stringify({
           stage: 3,
           fresh,
@@ -794,47 +829,60 @@ export default function AnalysisPage() {
 
   // Write (or rewrite) a Hand-off document from the evaluation and the plan, and keep it with them
   const writeDocument = async (doc: HandOffDoc) => {
-    const { url, schema, name, timeoutMs } = HAND_OFF_DOCS[doc]
+    const { url, name } = HAND_OFF_DOCS[doc]
+    const failed = `The ${name} couldn't be written this time. Please try again.`
     setWriting(doc)
     setWriteErrors(prev => ({ ...prev, [doc]: undefined }))
+    const stories = stageData.stage5?.brief ? numberStories(stageData.stage5.brief) : []
+    const screens = stageData.stage5?.wireframes?.screens.map((sc) => ({ name: sc.name, purpose: sc.purpose, stories: sc.stories })) ?? []
+    const body = {
+      ...evaluationBody(),
+      // Writing it again asks for a new version instead of the cached one
+      fresh: Boolean(stageData.stage5?.[doc]),
+      existingSolutions: stageData.stage2?.existingSolutions,
+      // The story map's stories and the screens, so later documents can cite them (US-1, "Dashboard", …)
+      stories,
+      screens,
+      plan: stageData.stage3 && stageData.stage4 && {
+        scopeCuts: stageData.stage3.scopeCuts,
+        versionMilestones: stageData.stage4.versionMilestones,
+        techRoadmap: stageData.stage4.techRoadmap,
+        securityConsiderations: stageData.stage4.securityConsiderations,
+      },
+    }
     try {
-      const response = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: AbortSignal.timeout(timeoutMs),
-        body: JSON.stringify({
-          ...evaluationBody(),
-          // Writing it again asks for a new version instead of the cached one
-          fresh: Boolean(stageData.stage5?.[doc]),
-          existingSolutions: stageData.stage2?.existingSolutions,
-          // The story map's stories and the screens, so later documents can cite them (US-1, "Dashboard", …)
-          stories: stageData.stage5?.brief ? numberStories(stageData.stage5.brief) : [],
-          screens: stageData.stage5?.wireframes?.screens.map((sc) => ({ name: sc.name, purpose: sc.purpose, stories: sc.stories })) ?? [],
-          plan: stageData.stage3 && stageData.stage4 && {
-            scopeCuts: stageData.stage3.scopeCuts,
-            versionMilestones: stageData.stage4.versionMilestones,
-            techRoadmap: stageData.stage4.techRoadmap,
-            securityConsiderations: stageData.stage4.securityConsiderations,
-          },
-        }),
-      })
-      const data = await response.json().catch(() => null)
-      if (!response.ok) throw new Error(data?.error || `The ${name} couldn't be written this time. Please try again.`)
-      const parsed = schema.safeParse(data)
-      if (!parsed.success) throw new Error(`The ${name} came back incomplete. Please try again.`)
+      let value: Brief | Wireframes | Srs
+      if (doc === "srs") {
+        // All three parts at once; a part that fails on the server or times out is asked for once more.
+        // Parts that did finish are cached on the server, so the retry only redoes the missing one.
+        const parts = await Promise.all(
+          SRS_PARTS.map(async ({ part, schema }) => {
+            const ask = () => postJson(url, { ...body, part }, failed)
+            const data = await ask().catch((error) => (error instanceof RequestError && error.retryable ? ask() : Promise.reject(error)))
+            const parsed = schema.safeParse(data)
+            if (!parsed.success) throw new RequestError(`The ${name} came back incomplete. Please try again.`, false)
+            return parsed.data
+          })
+        )
+        const [overview, features, quality] = parts as [
+          ReturnType<typeof srsOverviewSchema.parse>,
+          ReturnType<typeof srsFeaturesSchema.parse>,
+          ReturnType<typeof srsQualitySchema.parse>,
+        ]
+        value = tidySrs({ overview, features: features.features, quality }, stories.map((st) => st.id), screens.map((sc) => sc.name))
+      } else {
+        const schema = doc === "brief" ? briefSchema : wireframesSchema
+        const parsed = schema.safeParse(await postJson(url, body, failed))
+        if (!parsed.success) throw new RequestError(`The ${name} came back incomplete. Please try again.`, false)
+        value = parsed.data
+      }
       setStageData(prev => ({
         ...prev,
         // A new story map renumbers its stories, so wireframes citing the old numbers are dropped
-        stage5: { ...prev.stage5, [doc]: parsed.data, ...(doc === "brief" ? { wireframes: undefined } : {}) },
+        stage5: { ...prev.stage5, [doc]: value, ...(doc === "brief" ? { wireframes: undefined } : {}) },
       }))
     } catch (error) {
-      const message =
-        error instanceof DOMException && error.name === "TimeoutError"
-          ? `Writing the ${name} took too long. Please try again.`
-          : error instanceof Error && error.message
-            ? error.message
-            : "Couldn't reach the server. Check your connection and try again."
-      setWriteErrors(prev => ({ ...prev, [doc]: message }))
+      setWriteErrors(prev => ({ ...prev, [doc]: error instanceof Error && error.message ? error.message : failed }))
     } finally {
       setWriting(null)
     }
@@ -2094,7 +2142,7 @@ export default function AnalysisPage() {
           {busy ? "Writing…" : written ? again : label}
           {busy ? <Loader2 className="animate-spin" /> : written ? <RefreshCw /> : <ArrowRight />}
         </Button>
-        {busy ? <p className="text-meta text-pencil">This can take {HAND_OFF_DOCS[doc].wait}.</p> : null}
+        {busy ? <p className="text-meta text-pencil">This can take up to a minute.</p> : null}
         {writeErrors[doc] && !busy ? <p role="alert" className="text-meta font-medium text-marker">{writeErrors[doc]}</p> : null}
       </>
     )

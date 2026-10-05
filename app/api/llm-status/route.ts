@@ -1,9 +1,10 @@
 import { type NextRequest, NextResponse } from 'next/server'
-import { generateJsonWithMeta, routerStatus, type Tier } from '@/lib/llm'
+import { generateJsonWithMeta, routerStats, routerStatus, type Tier } from '@/lib/llm'
 
 /**
  * Development only.
- * GET: which model and key slots are available or cooling down (never the keys).
+ * GET: which model and key slots are available or cooling down (never the keys),
+ * and each slot's attempts, successes, failures by reason, and average time.
  * POST { tier, exclude }: send a tiny prompt through the router, skipping the
  * listed models, to check that a fallback answers.
  */
@@ -11,7 +12,7 @@ const notFound = () => NextResponse.json({ error: 'Not found' }, { status: 404 }
 
 export async function GET() {
   if (process.env.NODE_ENV === 'production') return notFound()
-  return NextResponse.json(routerStatus())
+  return NextResponse.json({ ...routerStatus(), stats: routerStats() })
 }
 
 export async function POST(request: NextRequest) {

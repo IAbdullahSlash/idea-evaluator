@@ -1,7 +1,8 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { validateIdea } from '@/lib/validation'
 import { missingContext } from '@/lib/schemas/context'
-import { NoModelAvailableError, forget, generateJsonWithMeta } from '@/lib/llm'
+import { DEFAULT_BUDGET_MS, NoModelAvailableError, forget, generateJsonWithMeta } from '@/lib/llm'
+import { AI_BUSY, AI_SLOW } from '@/lib/llm-checked'
 import { overallScore, snapshotSchema } from '@/lib/schemas/snapshot'
 
 // Intent validation is shared via lib/validation.ts (see validateIdea).
@@ -266,12 +267,14 @@ function snapshotBlock(score: unknown, recommendation: unknown): string {
 }
 
 const AI_FAILED = 'The marking service did not respond properly. Please try again.'
-const AI_BUSY = 'The AI models have reached their limits for now. Please try again in a little while.'
+
+// Vercel stops a function at this many seconds; every AI request is budgeted to finish inside it
+export const maxDuration = 60
 
 function aiError(error: unknown) {
   console.error('[analyze] Model call failed:', error instanceof Error ? error.message : error)
   const busy = error instanceof NoModelAvailableError
-  return NextResponse.json({ error: busy ? AI_BUSY : AI_FAILED }, { status: busy ? 503 : 502 })
+  return NextResponse.json({ error: busy ? (error.outOfTime ? AI_SLOW : AI_BUSY) : AI_FAILED }, { status: busy ? 503 : 502 })
 }
 
 /**
@@ -281,10 +284,13 @@ function aiError(error: unknown) {
  */
 async function markSnapshot(prompt: string, clarifications: Clarification[] | null) {
   const tried: string[] = []
+  // Both attempts share one deadline, inside the function's time limit
+  const deadline = Date.now() + DEFAULT_BUDGET_MS
   for (let attempt = 1; attempt <= 2; attempt++) {
     let raw: any
     try {
-      const reply = await generateJsonWithMeta<any>(prompt, { tier: 'quality', exclude: tried, cache: attempt === 1 })
+      // Marking is judgement, so the model may think first; the other stages are writing
+      const reply = await generateJsonWithMeta<any>(prompt, { tier: 'quality', exclude: tried, cache: attempt === 1, deadline, think: true })
       raw = reply.data
       tried.push(reply.model.replace(' (cached)', ''))
     } catch (error) {
