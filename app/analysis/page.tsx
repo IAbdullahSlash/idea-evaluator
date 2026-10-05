@@ -7,7 +7,9 @@ import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { validateIdea } from "@/lib/validation"
-import { fetchWithFallback } from "@/lib/fetch-with-fallback"
+import { buildReport } from "@/lib/report"
+import { downloadText, fileSlug, hireLinks, jiraCsv } from "@/lib/handoff"
+import { srsSchema, srsToMarkdown, type Srs } from "@/lib/schemas/srs"
 import { planSchema, type Plan } from "@/lib/schemas/plan"
 import { CONTEXT_QUESTIONS, missingContext } from "@/lib/schemas/context"
 import { availableWeeks, formatMoney, formatWeeks, sumCosts, totalWeeks } from "@/lib/plan-math"
@@ -16,7 +18,6 @@ import { CRITERIA } from "@/lib/schemas/snapshot"
 import {
   ArrowRight,
   ArrowUpRight,
-  BarChart3,
   ChevronDown,
   MoreHorizontal,
   Download,
@@ -230,10 +231,6 @@ interface GitHubRepo {
   owner: string
 }
 
-interface TaskProgress {
-  [key: string]: boolean
-}
-
 // Loose match between a scope feature and the plan's copy of it in scopeCuts
 const sameFeature = (a: string, b: string) => {
   const norm = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
@@ -291,18 +288,14 @@ export default function AnalysisPage() {
       securityConsiderations: SecurityConsideration[]
       costEstimates: CostEstimate[]
     }
+    // Hand-off: everything else on the page is built from the earlier stages
     stage5?: {
-      jiraIntegration: boolean
-      shareableLink: string
-      freelancerLinks: any[]
-      srsDocument: any
+      srs?: Srs
     }
   }>({})
 
   const [analysis, setAnalysis] = useState<AnalysisData | null>(null)
   const [loading, setLoading] = useState(false)
-  const [taskProgress, setTaskProgress] = useState<TaskProgress>({})
-  const [exportLoading, setExportLoading] = useState(false)
   const [githubRepos, setGithubRepos] = useState<GitHubRepo[]>([])
   const [githubLoading, setGithubLoading] = useState(false)
 
@@ -317,6 +310,11 @@ export default function AnalysisPage() {
   const [analyzing, setAnalyzing] = useState(false)
   // Why the last attempt to mark the idea failed, shown on the page with a retry
   const [analyzeError, setAnalyzeError] = useState<string | null>(null)
+  // Writing the requirements document on the Hand-off page, and why it failed
+  const [srsLoading, setSrsLoading] = useState(false)
+  const [srsError, setSrsError] = useState<string | null>(null)
+  // The report opened as a download because the browser blocked the new tab
+  const [reportDownloaded, setReportDownloaded] = useState(false)
   // Remaking the plan from the Plan page, and why it failed
   const [remakingPlan, setRemakingPlan] = useState(false)
   const [planError, setPlanError] = useState<string | null>(null)
@@ -367,6 +365,11 @@ export default function AnalysisPage() {
               delete stages.stage5
             }
           }
+          // Older versions saved other hand-off data; keep only a valid requirements document
+          if (stages.stage5) {
+            const srs = srsSchema.safeParse(stages.stage5.srs)
+            stages.stage5 = srs.success ? { srs: srs.data } : {}
+          }
           setStageData(prev => ({ ...prev, ...stages }))
         }
       }
@@ -375,10 +378,6 @@ export default function AnalysisPage() {
         const input = JSON.parse(savedInput)
         if (input?.formData?.idea) setFormData(prev => ({ ...prev, ...input.formData }))
         if (Array.isArray(input?.clarifications)) setClarifications(input.clarifications)
-      }
-      const savedProgress = localStorage.getItem("taskProgress")
-      if (savedProgress) {
-        setTaskProgress(JSON.parse(savedProgress))
       }
       // An idea started on the landing page opens on the blank script, pre-filled.
       const draftIdea = sessionStorage.getItem("draftIdea")
@@ -700,7 +699,6 @@ export default function AnalysisPage() {
   // 🔥 STAGE 3: Load the plan. It gets everything the earlier pages learned, so it
   // fits the time and experience given and agrees with the Summary's scope and stack.
   const loadPlanData = async ({ fresh = false } = {}) => {
-    const s2 = stageData.stage2?.analysis
     let response: Response
     try {
       response = await fetch("/api/stage-data", {
@@ -710,26 +708,7 @@ export default function AnalysisPage() {
         body: JSON.stringify({
           stage: 3,
           fresh,
-          idea: formData.idea,
-          projectType: formData.projectType,
-          domain: formData.domain,
-          experience: formData.experience,
-          timeline: formData.timeline,
-          clarifications: clarifications ?? [],
-          snapshot: analysis && {
-            projectTitle: analysis.projectTitle,
-            detectedDomain: analysis.detectedDomain,
-            estimatedTimeframe: analysis.estimatedTimeframe,
-            feasibilityScore: analysis.feasibilityScore,
-            recommendation: analysis.recommendation,
-          },
-          summary: s2 && {
-            feasibilityScore: s2.feasibilityScore,
-            estimatedTimeframe: s2.estimatedTimeframe,
-            requirementsScope: s2.requirementsScope,
-            techStack: s2.techStack,
-            potentialChallenges: s2.potentialChallenges,
-          },
+          ...evaluationBody(),
         }),
       })
     } catch (error) {
@@ -761,21 +740,72 @@ export default function AnalysisPage() {
 
   // 🔥 STAGE 4: Load Hand-off Data
   const loadHandOffData = async () => {
-    const handOffData = await fetchWithFallback(
-      () => fetch("/api/stage-data", {
+    setStageData(prev => ({ ...prev, stage5: prev.stage5 ?? {} }))
+  }
+
+  // What the earlier pages learned, as sent to the Plan and the requirements document
+  const evaluationBody = () => {
+    const s2 = stageData.stage2?.analysis
+    return {
+      idea: formData.idea,
+      projectType: formData.projectType,
+      domain: formData.domain,
+      experience: formData.experience,
+      timeline: formData.timeline,
+      clarifications: clarifications ?? [],
+      snapshot: analysis && {
+        projectTitle: analysis.projectTitle,
+        detectedDomain: analysis.detectedDomain,
+        estimatedTimeframe: analysis.estimatedTimeframe,
+        feasibilityScore: analysis.feasibilityScore,
+        recommendation: analysis.recommendation,
+        primaryUsers: analysis.targetUsersMarketFit?.primaryUsers,
+      },
+      summary: s2 && {
+        feasibilityScore: s2.feasibilityScore,
+        estimatedTimeframe: s2.estimatedTimeframe,
+        requirementsScope: s2.requirementsScope,
+        techStack: s2.techStack,
+        potentialChallenges: s2.potentialChallenges,
+      },
+    }
+  }
+
+  // Write (or rewrite) the requirements document from the evaluation and the plan
+  const writeSrs = async () => {
+    setSrsLoading(true)
+    setSrsError(null)
+    try {
+      const response = await fetch("/api/srs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stage: 4, analysis }),
-      }),
-      async () => ({
-        jiraIntegration: false,
-        shareableLink: generateShareableLink(),
-        freelancerLinks: generateFreelancerLinks(),
-        srsDocument: null,
-      }),
-      "Hand-off data"
-    )
-    setStageData(prev => ({ ...prev, stage5: handOffData }))
+        signal: AbortSignal.timeout(100_000),
+        body: JSON.stringify({
+          ...evaluationBody(),
+          plan: stageData.stage3 && stageData.stage4 && {
+            scopeCuts: stageData.stage3.scopeCuts,
+            versionMilestones: stageData.stage4.versionMilestones,
+            techRoadmap: stageData.stage4.techRoadmap,
+            securityConsiderations: stageData.stage4.securityConsiderations,
+          },
+        }),
+      })
+      const data = await response.json().catch(() => null)
+      if (!response.ok) throw new Error(data?.error || "The requirements document couldn't be written this time. Please try again.")
+      const srs = srsSchema.safeParse(data)
+      if (!srs.success) throw new Error("The requirements document came back incomplete. Please try again.")
+      setStageData(prev => ({ ...prev, stage5: { ...prev.stage5, srs: srs.data } }))
+    } catch (error) {
+      setSrsError(
+        error instanceof DOMException && error.name === "TimeoutError"
+          ? "Writing the document took too long. Please try again."
+          : error instanceof Error && error.message
+            ? error.message
+            : "Couldn't reach the server. Check your connection and try again."
+      )
+    } finally {
+      setSrsLoading(false)
+    }
   }
 
   // 🎨 STAGE RENDERING COMPONENTS
@@ -1978,154 +2008,184 @@ export default function AnalysisPage() {
   }
 
   // 🎨 STAGE 4: HAND-OFF
+  const projectTitle = () => analysis?.projectTitle || analysis?.shortTitle || "Project idea"
+
+  // Every page in one printable document, opened in a new tab
+  const openReport = () => {
+    if (!analysis) return
+    const html = buildReport({
+      idea: formData.idea,
+      context: CONTEXT_QUESTIONS.map((q) => ({
+        label: q.label,
+        value: q.options.find((o) => o.value === formData[q.id])?.label ?? "",
+      })),
+      snapshot: analysis,
+      summary: stageData.stage2?.analysis,
+      discussions: stageData.stage2?.discussions,
+      githubRepos: stageData.stage2?.githubRepos,
+      existingSolutions: stageData.stage2?.existingSolutions,
+      quickWins: stageData.stage2?.quickWins,
+      plan: stageData.stage3 && stageData.stage4 ? { stage3: stageData.stage3, stage4: stageData.stage4 } : undefined,
+    })
+    const url = URL.createObjectURL(new Blob([html], { type: "text/html" }))
+    const opened = window.open(url, "_blank")
+    if (opened) {
+      setReportDownloaded(false)
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } else {
+      // A blocked pop-up: save the report instead so it isn't lost
+      URL.revokeObjectURL(url)
+      downloadText(`${fileSlug(projectTitle())}-report.html`, html, "text/html")
+      setReportDownloaded(true)
+    }
+  }
+
   const renderDeepResources = () => {
     if (!analysis || !stageData.stage5) return null
+    const srs = stageData.stage5.srs
+    const phases = stageData.stage3?.projectMilestones ?? []
+    const taskCount = phases.reduce((n, p) => n + p.deliverables.length, 0)
+    const hiring = hireLinks(stageData.stage3?.teamRoles ?? [])
+    const mustCount = srs?.functionalRequirements.filter((r) => r.priority === "Must").length ?? 0
 
     return (
       <Sheet>
-        <SheetRow marginFirstOnMobile margin={<MarginNote mark={<Tick />} title="All four pages marked">Export the report to show your supervisor or team.</MarginNote>}>
+        <SheetRow marginFirstOnMobile margin={<MarginNote mark={<Tick />} title="All four pages marked">Take the report to your supervisor or team, and the plan into your tracker.</MarginNote>}>
           <h1 className="text-[1.5rem] font-semibold tracking-[-0.02em] text-ink sm:text-[1.75rem]">Take it further</h1>
+          <p className="mt-2 max-w-[60ch] text-[0.9375rem] text-ink-soft">The whole evaluation as a report, the requirements written up, and the plan ready to track.</p>
         </SheetRow>
 
         <SheetRow
           margin={
-            <Button onClick={exportToPDF} disabled={exportLoading} size="lg" className="h-11 w-full justify-between px-4">
-              {exportLoading ? "Preparing report…" : "Export PDF report"}
-              {exportLoading ? <Loader2 className="animate-spin" /> : <Download />}
-            </Button>
+            <div className="space-y-2">
+              <Button onClick={openReport} size="lg" className="h-11 w-full justify-between px-4">
+                Open the report <FileText />
+              </Button>
+              {reportDownloaded ? (
+                <p role="status" className="text-meta text-ink-soft">The browser blocked the new tab, so the report was saved as a file instead. Open it to print.</p>
+              ) : null}
+            </div>
           }
         >
           <SheetHeading>The report</SheetHeading>
           <p className="max-w-[60ch] text-[0.9375rem] leading-relaxed text-ink-soft">
-            A printable copy of the evaluation. It opens in a new tab; use your browser&apos;s print dialog to save it as a PDF.
+            Every page of this evaluation in one document: the mark and why, what people are saying, the risks, and the
+            full plan with costs. It opens in a new tab; print it or save it as a PDF from there.
           </p>
         </SheetRow>
 
-        <SheetRow>
-          <SheetHeading>Find people to build it</SheetHeading>
-          <ul className="grid gap-x-8 gap-y-4 sm:grid-cols-3">
-            {stageData.stage5.freelancerLinks.map((link, index) => (
-              <li key={index}>
-                <LinkTitle href={link.url}>{link.platform}</LinkTitle>
-                <p className="mt-1 text-sm text-ink-soft">{link.description}</p>
-              </li>
-            ))}
-          </ul>
+        <SheetRow
+          margin={
+            <div className="space-y-2">
+              {srs ? (
+                <Button
+                  size="lg"
+                  className="h-11 w-full justify-between px-4"
+                  onClick={() => downloadText(`${fileSlug(projectTitle())}-srs.md`, srsToMarkdown(srs, projectTitle()), "text/markdown")}
+                >
+                  Download SRS (.md) <Download />
+                </Button>
+              ) : null}
+              <Button
+                variant={srs ? "outline" : "default"}
+                size={srs ? "default" : "lg"}
+                onClick={writeSrs}
+                disabled={srsLoading}
+                className={cn("w-full justify-between", !srs && "h-11 px-4")}
+              >
+                {srsLoading ? "Writing the document…" : srs ? "Write it again" : "Write the SRS"}
+                {srsLoading ? <Loader2 className="animate-spin" /> : srs ? <RefreshCw /> : <ArrowRight />}
+              </Button>
+              {srsLoading ? <p className="text-meta text-pencil">This can take up to a minute.</p> : null}
+              {srsError && !srsLoading ? <p role="alert" className="text-meta font-medium text-marker">{srsError}</p> : null}
+            </div>
+          }
+        >
+          <SheetHeading>Requirements document (SRS)</SheetHeading>
+          <p className="max-w-[60ch] text-[0.9375rem] leading-relaxed text-ink-soft">
+            A software requirements specification in the IEEE 830 layout, written from this evaluation and the plan:
+            users, numbered requirements with acceptance criteria, and constraints. Markdown, so it opens in any editor
+            and pastes into Word or Google Docs.
+          </p>
+          {srs ? (
+            <div className="mt-5">
+              <p className="text-meta text-pencil tabular">
+                {plural(srs.functionalRequirements.length, "functional requirement")} ({mustCount} must) ·{" "}
+                {plural(srs.nonFunctionalRequirements.length, "non-functional requirement")} · {plural(srs.userClasses.length, "user class", "user classes")}
+              </p>
+              <ol className="mt-3 grid gap-x-8 gap-y-1.5 text-[0.9375rem] text-ink sm:grid-cols-2">
+                {srs.functionalRequirements.map((r, i) => (
+                  <li key={i} className="flex gap-2">
+                    <span className="font-mono text-meta text-pencil tabular pt-0.5">FR-{i + 1}</span>
+                    <span>
+                      {r.title}
+                      {r.priority !== "Must" ? <span className="text-meta text-pencil"> · {r.priority.toLowerCase()}</span> : null}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          ) : null}
         </SheetRow>
 
-        <SheetRow margin={<MarginNote title="Not available yet">These need saved reports and accounts, which are on the roadmap.</MarginNote>}>
+        {phases.length > 0 ? (
+          <SheetRow
+            margin={
+              <Button
+                size="lg"
+                variant="outline"
+                className="h-11 w-full justify-between px-4"
+                onClick={() => downloadText(`${fileSlug(projectTitle())}-jira.csv`, jiraCsv(phases, projectTitle()), "text/csv")}
+              >
+                Download CSV <Download />
+              </Button>
+            }
+          >
+            <SheetHeading>The plan as tasks</SheetHeading>
+            <p className="max-w-[60ch] text-[0.9375rem] leading-relaxed text-ink-soft">
+              {plural(phases.length, "epic")} and {plural(taskCount, "task")}: each phase of the plan becomes an epic and each
+              of its deliverables a task under it. Import it with Jira&apos;s CSV importer and map the <span className="font-medium text-ink">Issue ID</span> and{" "}
+              <span className="font-medium text-ink">Parent ID</span> columns so the tasks land under their epics. Trello,
+              Linear, and GitHub Projects can import the same file.
+            </p>
+          </SheetRow>
+        ) : null}
+
+        {hiring.length > 0 ? (
+          <SheetRow margin={<MarginNote mark={<Query />} title="Searches, not endorsements">Check reviews and past work before you hire anyone.</MarginNote>}>
+            <SheetHeading>Find people to build it</SheetHeading>
+            <ul className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
+              {hiring.map((h) => (
+                <li key={h.role}>
+                  <p className="font-semibold text-ink">{h.role}</p>
+                  {h.skills ? <p className="text-meta text-pencil">{h.skills}</p> : null}
+                  <p className="mt-1 flex gap-4 text-sm">
+                    {h.sites.map((site) => <LinkTitle key={site.name} href={site.url}>{site.name}</LinkTitle>)}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </SheetRow>
+        ) : null}
+
+        <SheetRow margin={<MarginNote title="Not available yet">It needs saved reports and accounts, which are on the roadmap.</MarginNote>}>
           <SheetHeading>Coming later</SheetHeading>
-          <ul className="divide-y divide-rule">
-            {[
-              { icon: LinkIcon, title: "Shareable report link", text: "A permanent link to this evaluation." },
-              { icon: FileText, title: "Requirements document (SRS)", text: "An IEEE-style software requirements specification." },
-              { icon: BarChart3, title: "Jira export", text: "Milestones and deliverables as Jira issues." },
-            ].map(({ icon: Icon, title, text }) => (
-              <li key={title} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0 text-pencil">
-                <Icon className="mt-0.5 size-4 shrink-0" aria-hidden />
-                <div>
-                  <p className="font-medium text-ink-soft">{title}</p>
-                  <p className="text-sm">{text}</p>
-                </div>
-              </li>
-            ))}
-          </ul>
+          <p className="flex items-start gap-3 text-pencil">
+            <LinkIcon className="mt-0.5 size-4 shrink-0" aria-hidden />
+            <span>
+              <span className="block font-medium text-ink-soft">Shareable report link</span>
+              <span className="text-sm">A permanent link to this evaluation, to send instead of a file.</span>
+            </span>
+          </p>
         </SheetRow>
       </Sheet>
     )
-  }
-
-  const exportToPDF = async () => {
-    if (!analysis) return
-
-    setExportLoading(true)
-    try {
-      const response = await fetch("/api/export-pdf", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          analysis,
-          taskProgress,
-          overallProgress: getOverallProgress(),
-        }),
-      })
-
-      if (response.ok) {
-        const html = await response.text()
-        const blob = new Blob([html], { type: "text/html" })
-        const url = window.URL.createObjectURL(blob)
-        const printWindow = window.open(url, "_blank")
-        if (!printWindow) {
-          // Fallback if popup blocked
-          alert("Please allow popups to export PDF, or use your browser's print function (Ctrl+P)")
-        }
-      } else {
-        throw new Error("Export failed")
-      }
-    } catch (error) {
-      console.error("PDF export failed:", error)
-      alert("Failed to export PDF. Please try again.")
-    } finally {
-      setExportLoading(false)
-    }
-  }
-
-  const handleTaskToggle = (taskId: string) => {
-    const newProgress = { ...taskProgress, [taskId]: !taskProgress[taskId] }
-    setTaskProgress(newProgress)
-    localStorage.setItem("taskProgress", JSON.stringify(newProgress))
-  }
-
-  // 🔧 PROTECTED HELPER FUNCTIONS
-  const getPhaseProgress = (phaseTasks: string[], phaseKey: string) => {
-    if (!phaseTasks || phaseTasks.length === 0) return 0
-    const completedTasks = phaseTasks.filter((_, index) => taskProgress[`${phaseKey}-${index}`]).length
-    return (completedTasks / phaseTasks.length) * 100
-  }
-
-  const getOverallProgress = () => {
-    if (!analysis || !analysis.roadmap) return 0
-    
-    const phase1Tasks = analysis.roadmap.phase1?.tasks || []
-    const phase2Tasks = analysis.roadmap.phase2?.tasks || []
-    const phase3Tasks = analysis.roadmap.phase3?.tasks || []
-    
-    const allTasks = [...phase1Tasks, ...phase2Tasks, ...phase3Tasks]
-    
-    if (allTasks.length === 0) return 0
-    
-    const completedTasks = allTasks.filter((_, globalIndex) => {
-      const phase1Length = phase1Tasks.length
-      const phase2Length = phase2Tasks.length
-
-      if (globalIndex < phase1Length) {
-        return taskProgress[`phase1-${globalIndex}`]
-      } else if (globalIndex < phase1Length + phase2Length) {
-        return taskProgress[`phase2-${globalIndex - phase1Length}`]
-      } else {
-        return taskProgress[`phase3-${globalIndex - phase1Length - phase2Length}`]
-      }
-    }).length
-    
-    return (completedTasks / allTasks.length) * 100
-  }
-
-  const getFeasibilityColor = (score: number) => {
-    if (score >= 8) return "text-green-500"
-    if (score >= 6) return "text-yellow-500"
-    return "text-red-500"
   }
 
   const getFeasibilityBadge = (score: number) => {
     if (score >= 8) return { variant: "default" as const, text: "Highly Feasible" }
     if (score >= 6) return { variant: "secondary" as const, text: "Feasible" }
     return { variant: "destructive" as const, text: "Challenging" }
-  }
-
-  const getRealityCheckColor = (score: number) => {
-    if (score >= 8) return "border-green-500 bg-green-500/10"
-    if (score >= 6) return "border-yellow-500 bg-yellow-500/10"
-    return "border-red-500 bg-red-500/10"
   }
 
   // Generate AI verdict based on scores
@@ -2153,34 +2213,6 @@ export default function AnalysisPage() {
     setClarifications(null)
     setCurrentStage(AnalysisStage.INPUT)
     setAnalysis(null)
-  }
-
-  // 🔥 STAGE DATA GENERATORS
-  const generateShareableLink = (): string => {
-    const reportId = Math.random().toString(36).substring(2, 15)
-    return `${window.location.origin}/shared-report/${reportId}`
-  }
-
-  const generateFreelancerLinks = () => {
-    if (!analysis) return []
-    const domain = analysis.detectedDomain.toLowerCase()
-    return [
-      {
-        platform: "Fiverr",
-        url: `https://www.fiverr.com/search/gigs?query=${encodeURIComponent(domain)}%20development`,
-        description: `Find ${domain} experts on Fiverr`
-      },
-      {
-        platform: "Upwork",
-        url: `https://www.upwork.com/freelance-jobs/${domain.replace(/\s+/g, '-')}/`,
-        description: `Browse ${domain} freelancers on Upwork`
-      },
-      {
-        platform: "Freelancer.com",
-        url: `https://www.freelancer.com/jobs/${domain.replace(/\s+/g, '-')}/`,
-        description: `Hire ${domain} developers on Freelancer`
-      }
-    ]
   }
 
   const stageLabels: Record<number, string> = {

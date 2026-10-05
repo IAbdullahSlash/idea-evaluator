@@ -13,8 +13,8 @@ The evaluation runs in four stages. Each one opens only when you choose to conti
 
 1. **Snapshot** — A mark out of 10, worked out from six criteria (a real problem, worth solving, not already done, something new, within reach, someone wants it), each with its own mark and reason. Also a recommendation (Build / Narrow it down / Rethink / Drop), odds of success, an honest reality check, who it is for, and questions to ask yourself. If the idea is too vague to mark, it asks up to three follow-up questions first.
 2. **Summary** — Pros and cons, risks with severity, what people are discussing (Hacker News and Stack Exchange) and recent news coverage (Google News), quick wins, existing solutions, similar projects on GitHub, and an executive summary.
-3. **Plan** — Scope, a suggested stack, phases with deliverables, the team you need, technology layers, versions, security, and costs.
-4. **Hand-off** — A printable report and links to find people who can help build it.
+3. **Plan** — Whether the scope fits your time, phases sized to it, scope cuts, the team, the stack, versions, security, and costs added up.
+4. **Hand-off** — A printable report of every page, a requirements document (SRS) to download, the plan as a Jira CSV, and searches for people with the plan's skills.
 
 ## Architecture
 
@@ -24,17 +24,17 @@ Browser (Next.js 14 App Router)
   └─ /analysis    The four-stage evaluation
         │
         ├─ POST /api/analyze      Snapshot and Summary (validated against a schema)
-        ├─ POST /api/stage-data   Plan and Hand-off
+        ├─ POST /api/stage-data   Plan (validated against a schema)
+        ├─ POST /api/srs          Requirements document (validated against a schema)
         ├─ POST /api/discussions  Hacker News, Stack Exchange, and Google News, filtered and summarised
-        ├─ POST /api/github-repos Similar repositories
-        └─ POST /api/export-pdf   Printable report
+        └─ POST /api/github-repos Similar repositories
                 │
                 └─ lib/llm.ts — AI router
-                     "quality" tier: gemini-3.5-flash → gemini-3.8-flash → gemini-2.5-flash → Groq gpt-oss-120b
+                     "quality" tier: gemini-3.5-flash → gemini-3.8-flash → Groq gpt-oss-120b
                      "light" tier:   gemini-3.5-flash-lite → 2.5-flash-lite → 3.1-flash-lite → Groq gpt-oss-20b
 ```
 
-Every Gemini model is tried with every configured key before moving on. A model/key pair that hits a quota, rate limit, overload, or timeout is skipped until it recovers, and identical prompts are cached for a day. Keys stay on the server.
+Every Gemini model is tried with every configured key before moving on. A key that hits a quota or rate limit is skipped until it recovers; a model that is overloaded, retired, or timing out is skipped on every key at once. Identical prompts are cached for a day. Keys stay on the server.
 
 ## Tech Stack
 
@@ -99,11 +99,11 @@ app/
 ├── analysis/page.tsx        # The four-stage evaluation
 └── api/
     ├── analyze/             # Snapshot and Summary
-    ├── stage-data/          # Plan and Hand-off
+    ├── stage-data/          # Plan
+    ├── srs/                 # Requirements document
     ├── discussions/         # Discussions and news
     ├── github-repos/        # Similar repositories
     ├── google-search/       # Web search (needs Google Custom Search keys; not used by the UI yet)
-    ├── export-pdf/          # Printable report
     └── llm-status/          # Dev-only router status
 components/
 ├── script/                  # The marked-script design system: sheet, margin notes, marks, stage tabs
@@ -111,7 +111,11 @@ components/
 └── *.tsx                    # Landing page sections
 lib/
 ├── llm.ts                   # Multi-key, multi-model AI router
-├── schemas/snapshot.ts      # Snapshot schema and marking criteria
+├── schemas/                 # Schemas: snapshot, plan, SRS, and the questions asked with the idea
+├── evaluation-context.ts    # What earlier pages learned, as prompt text for the Plan and SRS
+├── plan-math.ts             # Phase durations and costs added up
+├── report.ts                # The printable report, built in the browser
+├── handoff.ts               # Jira CSV, hiring searches, downloads
 ├── hackernews.ts            # Hacker News search and comments
 ├── stackexchange.ts         # Stack Exchange questions and answers
 ├── news.ts                  # Google News search
