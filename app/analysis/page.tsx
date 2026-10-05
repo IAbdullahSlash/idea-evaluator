@@ -10,7 +10,7 @@ import { validateIdea } from "@/lib/validation"
 import { buildReport } from "@/lib/documents/report"
 import { buildSrsDocument } from "@/lib/documents/srs"
 import { downloadText, fileSlug, hireLinks, jiraCsv, openHtml } from "@/lib/handoff"
-import { srsSchema, type Srs } from "@/lib/schemas/srs"
+import { numberRequirements, srsSchema, type Srs } from "@/lib/schemas/srs"
 import { briefSchema, numberStories, type Brief } from "@/lib/schemas/brief"
 import { wireframesSchema, type Wireframes } from "@/lib/schemas/wireframes"
 import { planSchema, type Plan } from "@/lib/schemas/plan"
@@ -236,10 +236,11 @@ interface GitHubRepo {
 
 // The documents the Hand-off page writes on request, and where
 type HandOffDoc = "brief" | "wireframes" | "srs"
+// The SRS is three model calls at once, so it gets longer to finish
 const HAND_OFF_DOCS = {
-  brief: { url: "/api/brief", schema: briefSchema, name: "product vision and story map" },
-  wireframes: { url: "/api/wireframes", schema: wireframesSchema, name: "wireframes" },
-  srs: { url: "/api/srs", schema: srsSchema, name: "requirements document" },
+  brief: { url: "/api/brief", schema: briefSchema, name: "product vision and story map", timeoutMs: 100_000, wait: "up to a minute" },
+  wireframes: { url: "/api/wireframes", schema: wireframesSchema, name: "wireframes", timeoutMs: 100_000, wait: "up to a minute" },
+  srs: { url: "/api/srs", schema: srsSchema, name: "requirements document", timeoutMs: 180_000, wait: "a minute or two" },
 } as const
 
 // Loose match between a scope feature and the plan's copy of it in scopeCuts
@@ -793,21 +794,22 @@ export default function AnalysisPage() {
 
   // Write (or rewrite) a Hand-off document from the evaluation and the plan, and keep it with them
   const writeDocument = async (doc: HandOffDoc) => {
-    const { url, schema, name } = HAND_OFF_DOCS[doc]
+    const { url, schema, name, timeoutMs } = HAND_OFF_DOCS[doc]
     setWriting(doc)
     setWriteErrors(prev => ({ ...prev, [doc]: undefined }))
     try {
       const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        signal: AbortSignal.timeout(100_000),
+        signal: AbortSignal.timeout(timeoutMs),
         body: JSON.stringify({
           ...evaluationBody(),
           // Writing it again asks for a new version instead of the cached one
           fresh: Boolean(stageData.stage5?.[doc]),
           existingSolutions: stageData.stage2?.existingSolutions,
-          // The story map's stories, so screens can cite them (US-1, US-2, …)
+          // The story map's stories and the screens, so later documents can cite them (US-1, "Dashboard", …)
           stories: stageData.stage5?.brief ? numberStories(stageData.stage5.brief) : [],
+          screens: stageData.stage5?.wireframes?.screens.map((sc) => ({ name: sc.name, purpose: sc.purpose, stories: sc.stories })) ?? [],
           plan: stageData.stage3 && stageData.stage4 && {
             scopeCuts: stageData.stage3.scopeCuts,
             versionMilestones: stageData.stage4.versionMilestones,
@@ -2063,7 +2065,11 @@ export default function AnalysisPage() {
   }
 
   const openSrs = (srs: Srs) => {
-    const html = buildSrsDocument(srs, projectTitle(), stageData.stage5?.wireframes)
+    const brief = stageData.stage5?.brief
+    const html = buildSrsDocument(srs, projectTitle(), {
+      wireframes: stageData.stage5?.wireframes,
+      stories: brief ? numberStories(brief) : [],
+    })
     setSavedInstead(openHtml(html, `${fileSlug(projectTitle())}-srs.html`) ? null : "srs")
   }
 
@@ -2088,7 +2094,7 @@ export default function AnalysisPage() {
           {busy ? "Writing…" : written ? again : label}
           {busy ? <Loader2 className="animate-spin" /> : written ? <RefreshCw /> : <ArrowRight />}
         </Button>
-        {busy ? <p className="text-meta text-pencil">This can take up to a minute.</p> : null}
+        {busy ? <p className="text-meta text-pencil">This can take {HAND_OFF_DOCS[doc].wait}.</p> : null}
         {writeErrors[doc] && !busy ? <p role="alert" className="text-meta font-medium text-marker">{writeErrors[doc]}</p> : null}
       </>
     )
@@ -2103,7 +2109,11 @@ export default function AnalysisPage() {
     const phases = stageData.stage3?.projectMilestones ?? []
     const taskCount = phases.reduce((n, p) => n + p.deliverables.length, 0)
     const hiring = hireLinks(stageData.stage3?.teamRoles ?? [])
-    const mustCount = srs?.functionalRequirements.filter((r) => r.priority === "Must").length ?? 0
+    const requirements = srs ? numberRequirements(srs) : []
+    const nfrCount = srs ? [srs.quality.performance, srs.quality.safety, srs.quality.security, srs.quality.quality, srs.quality.businessRules].reduce((n, l) => n + l.length, 0) : 0
+    // Stories no requirement traces to, the same check as the SRS's Appendix A
+    const traced = new Set(requirements.flatMap((r) => r.stories))
+    const untraced = stories.filter((st) => !traced.has(st.id))
 
     return (
       <Sheet>
@@ -2178,27 +2188,41 @@ export default function AnalysisPage() {
         >
           <SheetHeading>Requirements document (SRS)</SheetHeading>
           <p className="max-w-[60ch] text-[0.9375rem] leading-relaxed text-ink-soft">
-            A software requirements specification on the IEEE 830 outline, written from this evaluation and the plan:
-            users, interfaces, numbered requirements with acceptance criteria, and non-functional requirements. It opens
-            as a paged document with a revision history and contents; save it as a PDF from the print dialog.
+            A detailed software requirements specification on the IEEE 830 outline, written from this evaluation, the plan,
+            the story map, and the wireframes: users and interfaces, features with numbered requirements and acceptance
+            criteria, measurable quality requirements, the data model, and a traceability table back to the user stories
+            and screens. It opens as a paged document; save it as a PDF from the print dialog.
           </p>
+          {!srs && (!brief || !wireframes) ? (
+            <p className="mt-3 max-w-[60ch] text-sm text-pencil">
+              Write the vision and story map{wireframes ? "" : " and draw the wireframes"} first, so the requirements can trace to them.
+            </p>
+          ) : null}
           {srs ? (
             <div className="mt-5">
               <p className="text-meta text-pencil tabular">
-                {plural(srs.functionalRequirements.length, "functional requirement")} ({mustCount} must) ·{" "}
-                {plural(srs.nonFunctionalRequirements.length, "non-functional requirement")} · {plural(srs.userClasses.length, "user class", "user classes")}
+                {plural(srs.features.length, "feature")} · {plural(requirements.length, "functional requirement")} ·{" "}
+                {plural(nfrCount, "non-functional requirement")} · {plural(srs.quality.entities.length, "data entity", "data entities")} ·{" "}
+                {plural(srs.quality.openQuestions.length, "open question")}
               </p>
               <ol className="mt-3 grid gap-x-8 gap-y-1.5 text-[0.9375rem] text-ink sm:grid-cols-2">
-                {srs.functionalRequirements.map((r, i) => (
+                {srs.features.map((f, i) => (
                   <li key={i} className="flex gap-2">
-                    <span className="font-mono text-meta text-pencil tabular pt-0.5">FR-{i + 1}</span>
+                    <span className="font-mono text-meta text-pencil tabular pt-0.5">4.{i + 1}</span>
                     <span>
-                      {r.title}
-                      {r.priority !== "Must" ? <span className="text-meta text-pencil"> · {r.priority.toLowerCase()}</span> : null}
+                      {f.name}
+                      {f.priority !== "Must" ? <span className="text-meta text-pencil"> · {f.priority.toLowerCase()}</span> : null}
                     </span>
                   </li>
                 ))}
               </ol>
+              {stories.length ? (
+                <p className={cn("mt-3 text-meta", untraced.length ? "font-medium text-marker" : "text-pencil")}>
+                  {untraced.length
+                    ? `${plural(untraced.length, "user story", "user stories")} with no requirement: ${untraced.map((st) => st.id).join(", ")}. Write it again or add them by hand.`
+                    : `Every user story traces to a requirement.`}
+                </p>
+              ) : null}
             </div>
           ) : null}
         </SheetRow>

@@ -122,7 +122,11 @@ const heading = (item: Numbered) =>
 
 // A subsection this short stays on one page with its heading, so a heading is never left alone
 // at the foot of a page. Longer ones may break; Paged.js can't keep a heading with what follows.
+// Length is judged by characters and by lines (table rows, list items, paragraphs), since a
+// table is tall for its character count.
 const KEEP_TOGETHER_CHARS = 2500
+const KEEP_TOGETHER_LINES = 14
+const lineCount = (html: string) => (html.match(/<(tr|li|p|h4)[\s>]/g) ?? []).length
 
 function renderSection(item: Numbered, all: Numbered[]): string {
   const { section, depth } = item
@@ -133,7 +137,8 @@ function renderSection(item: Numbered, all: Numbered[]): string {
   const empty = !body && children.length === 0 ? `<p class="empty">${esc(section.empty ?? NONE)}</p>` : ''
   const head = `<${tag} id="${item.id}">${section.appendix ? '' : `<span class="no">${item.number}</span> `}${heading(item)}</${tag}>`
   const own = head + (body ?? '') + empty
-  const short = depth > 1 && children.length === 0 && (section.keepTogether || own.length < KEEP_TOGETHER_CHARS)
+  const short =
+    depth > 1 && children.length === 0 && (section.keepTogether || (own.length < KEEP_TOGETHER_CHARS && lineCount(own) <= KEEP_TOGETHER_LINES))
   return `<section class="d${depth}">${short ? `<div class="block">${own}</div>` : own}${children.map((c) => renderSection(c, all)).join('')}</section>`
 }
 
@@ -260,6 +265,7 @@ const STYLE = `
   th, td { text-align: left; vertical-align: top; padding: 1.8mm 2mm 1.8mm 0; border-bottom: 1px solid var(--rule); }
   th { font-size: 7.5pt; text-transform: uppercase; letter-spacing: .06em; color: var(--pencil); border-bottom: 1px solid var(--ink); }
   tr { break-inside: avoid; }
+  .nowrap { white-space: nowrap; }
   .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; padding-left: 4mm; padding-right: 4mm; }
   th.num:last-child, td.num:last-child { padding-right: 0; }
   tr.total td { font-weight: 700; border-top: 2px solid var(--ink); border-bottom: 0; }

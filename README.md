@@ -14,7 +14,7 @@ The evaluation runs in four stages. Each one opens only when you choose to conti
 1. **Snapshot** — A mark out of 10, worked out from six criteria (a real problem, worth solving, not already done, something new, within reach, someone wants it), each with its own mark and reason. Also a recommendation (Build / Narrow it down / Rethink / Drop), odds of success, an honest reality check, who it is for, and questions to ask yourself. If the idea is too vague to mark, it asks up to three follow-up questions first.
 2. **Summary** — Pros and cons, risks with severity, what people are discussing (Hacker News and Stack Exchange) and recent news coverage (Google News), quick wins, existing solutions, similar projects on GitHub, and an executive summary.
 3. **Plan** — Whether the scope fits your time, phases sized to it, scope cuts, the team, the stack, versions, security, and costs added up.
-4. **Hand-off** — Two paged documents to save as PDF: the Report (evaluation, product vision, user story map, wireframes, plan) and the SRS (IEEE 830 outline); the plan as a Jira CSV; and searches for people with the plan's skills.
+4. **Hand-off** — Two paged documents to save as PDF: the Report (evaluation, product vision, user story map, wireframes, plan) and a detailed SRS (IEEE 830 outline, with a data model and traceability to the user stories and screens); the plan as a Jira CSV; and searches for people with the plan's skills.
 
 ## Architecture
 
@@ -27,7 +27,7 @@ Browser (Next.js 14 App Router)
         ├─ POST /api/stage-data   Plan (validated against a schema)
         ├─ POST /api/brief        Product vision and user story map (validated against a schema)
         ├─ POST /api/wireframes   Key screens as low-fidelity wireframes (validated against a schema)
-        ├─ POST /api/srs          Requirements document (validated against a schema)
+        ├─ POST /api/srs          Detailed requirements document, written in three parts at once (each validated)
         ├─ POST /api/discussions  Hacker News, Stack Exchange, and Google News, filtered and summarised
         └─ POST /api/github-repos Similar repositories
                 │
@@ -115,6 +115,7 @@ components/
 └── *.tsx                    # Landing page sections
 lib/
 ├── llm.ts                   # Multi-key, multi-model AI router
+├── llm-checked.ts           # Ask, check against a schema, retry once on another model
 ├── schemas/                 # Schemas: snapshot, plan, product brief, SRS, and the questions asked with the idea
 ├── documents/               # Document template (fixed outline, Paged.js), the Report and SRS layouts, and the wireframe drawing
 ├── evaluation-context.ts    # What earlier pages learned, as prompt text for the Plan and SRS
