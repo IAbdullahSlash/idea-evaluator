@@ -27,7 +27,7 @@ yarn-error.log*
 next-env.d.ts
 
 # Documents
-Documents/
+/Documents/
 integrated-nextjs/ 
 
 # Local task files

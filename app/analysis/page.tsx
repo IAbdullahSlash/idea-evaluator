@@ -7,9 +7,10 @@ import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { validateIdea } from "@/lib/validation"
-import { buildReport } from "@/lib/report"
-import { downloadText, fileSlug, hireLinks, jiraCsv } from "@/lib/handoff"
-import { srsSchema, srsToMarkdown, type Srs } from "@/lib/schemas/srs"
+import { buildReport } from "@/lib/documents/report"
+import { buildSrsDocument } from "@/lib/documents/srs"
+import { downloadText, fileSlug, hireLinks, jiraCsv, openHtml } from "@/lib/handoff"
+import { srsSchema, type Srs } from "@/lib/schemas/srs"
 import { planSchema, type Plan } from "@/lib/schemas/plan"
 import { CONTEXT_QUESTIONS, missingContext } from "@/lib/schemas/context"
 import { availableWeeks, formatMoney, formatWeeks, sumCosts, totalWeeks } from "@/lib/plan-math"
@@ -313,8 +314,8 @@ export default function AnalysisPage() {
   // Writing the requirements document on the Hand-off page, and why it failed
   const [srsLoading, setSrsLoading] = useState(false)
   const [srsError, setSrsError] = useState<string | null>(null)
-  // The report opened as a download because the browser blocked the new tab
-  const [reportDownloaded, setReportDownloaded] = useState(false)
+  // A document saved as a file because the browser blocked its new tab
+  const [savedInstead, setSavedInstead] = useState<"report" | "srs" | null>(null)
   // Remaking the plan from the Plan page, and why it failed
   const [remakingPlan, setRemakingPlan] = useState(false)
   const [planError, setPlanError] = useState<string | null>(null)
@@ -2027,18 +2028,18 @@ export default function AnalysisPage() {
       quickWins: stageData.stage2?.quickWins,
       plan: stageData.stage3 && stageData.stage4 ? { stage3: stageData.stage3, stage4: stageData.stage4 } : undefined,
     })
-    const url = URL.createObjectURL(new Blob([html], { type: "text/html" }))
-    const opened = window.open(url, "_blank")
-    if (opened) {
-      setReportDownloaded(false)
-      setTimeout(() => URL.revokeObjectURL(url), 60_000)
-    } else {
-      // A blocked pop-up: save the report instead so it isn't lost
-      URL.revokeObjectURL(url)
-      downloadText(`${fileSlug(projectTitle())}-report.html`, html, "text/html")
-      setReportDownloaded(true)
-    }
+    setSavedInstead(openHtml(html, `${fileSlug(projectTitle())}-report.html`) ? null : "report")
   }
+
+  const openSrs = (srs: Srs) => {
+    const html = buildSrsDocument(srs, projectTitle())
+    setSavedInstead(openHtml(html, `${fileSlug(projectTitle())}-srs.html`) ? null : "srs")
+  }
+
+  const SavedInsteadNote = ({ doc }: { doc: "report" | "srs" }) =>
+    savedInstead === doc ? (
+      <p role="status" className="text-meta text-ink-soft">The browser blocked the new tab, so it was saved as a file instead. Open the file to print it.</p>
+    ) : null
 
   const renderDeepResources = () => {
     if (!analysis || !stageData.stage5) return null
@@ -2061,16 +2062,15 @@ export default function AnalysisPage() {
               <Button onClick={openReport} size="lg" className="h-11 w-full justify-between px-4">
                 Open the report <FileText />
               </Button>
-              {reportDownloaded ? (
-                <p role="status" className="text-meta text-ink-soft">The browser blocked the new tab, so the report was saved as a file instead. Open it to print.</p>
-              ) : null}
+              <SavedInsteadNote doc="report" />
             </div>
           }
         >
           <SheetHeading>The report</SheetHeading>
           <p className="max-w-[60ch] text-[0.9375rem] leading-relaxed text-ink-soft">
-            Every page of this evaluation in one document: the mark and why, what people are saying, the risks, and the
-            full plan with costs. It opens in a new tab; print it or save it as a PDF from there.
+            The evaluation and product brief as a paged document: executive summary, product vision, the marking and
+            market, risks, the plan with costs, and next steps, with a contents page. It opens in a new tab; save it as a
+            PDF from the print dialog.
           </p>
         </SheetRow>
 
@@ -2078,12 +2078,8 @@ export default function AnalysisPage() {
           margin={
             <div className="space-y-2">
               {srs ? (
-                <Button
-                  size="lg"
-                  className="h-11 w-full justify-between px-4"
-                  onClick={() => downloadText(`${fileSlug(projectTitle())}-srs.md`, srsToMarkdown(srs, projectTitle()), "text/markdown")}
-                >
-                  Download SRS (.md) <Download />
+                <Button size="lg" className="h-11 w-full justify-between px-4" onClick={() => openSrs(srs)}>
+                  Open the SRS <FileText />
                 </Button>
               ) : null}
               <Button
@@ -2098,14 +2094,15 @@ export default function AnalysisPage() {
               </Button>
               {srsLoading ? <p className="text-meta text-pencil">This can take up to a minute.</p> : null}
               {srsError && !srsLoading ? <p role="alert" className="text-meta font-medium text-marker">{srsError}</p> : null}
+              <SavedInsteadNote doc="srs" />
             </div>
           }
         >
           <SheetHeading>Requirements document (SRS)</SheetHeading>
           <p className="max-w-[60ch] text-[0.9375rem] leading-relaxed text-ink-soft">
-            A software requirements specification in the IEEE 830 layout, written from this evaluation and the plan:
-            users, numbered requirements with acceptance criteria, and constraints. Markdown, so it opens in any editor
-            and pastes into Word or Google Docs.
+            A software requirements specification on the IEEE 830 outline, written from this evaluation and the plan:
+            users, interfaces, numbered requirements with acceptance criteria, and non-functional requirements. It opens
+            as a paged document with a revision history and contents; save it as a PDF from the print dialog.
           </p>
           {srs ? (
             <div className="mt-5">

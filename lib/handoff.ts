@@ -83,6 +83,21 @@ export function downloadText(filename: string, text: string, type: string): void
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
+/**
+ * Open an HTML document in a new tab. Returns false when the browser blocked
+ * the tab; the document is then saved as a file so it isn't lost.
+ */
+export function openHtml(html: string, filename: string): boolean {
+  const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }))
+  if (window.open(url, '_blank')) {
+    setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    return true
+  }
+  URL.revokeObjectURL(url)
+  downloadText(filename, html, 'text/html')
+  return false
+}
+
 /** A safe file name from the project title. */
 export const fileSlug = (title: string) =>
   title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'project'
