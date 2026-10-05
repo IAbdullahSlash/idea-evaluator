@@ -20,6 +20,8 @@ export interface DocSection {
   children?: DocSection[]
   /** A top-level appendix: lettered (A, B, …) after the numbered sections. */
   appendix?: boolean
+  /** Keep the whole subsection on one page, however long (e.g. a heading with its figure). */
+  keepTogether?: boolean
 }
 
 export interface DocMeta {
@@ -131,7 +133,7 @@ function renderSection(item: Numbered, all: Numbered[]): string {
   const empty = !body && children.length === 0 ? `<p class="empty">${esc(section.empty ?? NONE)}</p>` : ''
   const head = `<${tag} id="${item.id}">${section.appendix ? '' : `<span class="no">${item.number}</span> `}${heading(item)}</${tag}>`
   const own = head + (body ?? '') + empty
-  const short = depth > 1 && children.length === 0 && own.length < KEEP_TOGETHER_CHARS
+  const short = depth > 1 && children.length === 0 && (section.keepTogether || own.length < KEEP_TOGETHER_CHARS)
   return `<section class="d${depth}">${short ? `<div class="block">${own}</div>` : own}${children.map((c) => renderSection(c, all)).join('')}</section>`
 }
 
@@ -152,19 +154,25 @@ export function renderDocument(doc: DocumentSpec): string {
 <title>${esc(doc.title)}: ${esc(doc.kind)}</title>
 <style>${STYLE}</style>
 <script>
-  // Paged.js lays the document out into pages; the print button is added after,
-  // so it isn't laid out as part of the document
-  window.PagedConfig = { after: function () { window.__addPrintButton && window.__addPrintButton() } }
-  window.__addPrintButton = function () {
-    if (document.querySelector('.print')) return
-    var b = document.createElement('button')
-    b.className = 'print'
-    b.textContent = 'Print or save as PDF'
-    b.onclick = function () { window.print() }
-    document.body.appendChild(b)
+  // Paged.js lays the document out into pages, which takes a few seconds for a
+  // long document. Until it is done a "Preparing pages" note shows, so nobody
+  // prints half a document; then it becomes the print button. Both live on
+  // <html>, outside <body>, so Paged.js doesn't lay them out as content.
+  window.__printControl = function (ready) {
+    var el = document.querySelector('.print')
+    if (!el) {
+      el = document.createElement('button')
+      el.className = 'print'
+      el.onclick = function () { window.print() }
+      document.documentElement.appendChild(el)
+    }
+    el.disabled = !ready
+    el.textContent = ready ? 'Print or save as PDF' : 'Preparing pages…'
   }
-  // If Paged.js can't load (offline), the document still reads as one long page
-  window.addEventListener('load', function () { setTimeout(window.__addPrintButton, 4000) })
+  window.PagedConfig = { after: function () { window.__printControl(true) } }
+  document.addEventListener('DOMContentLoaded', function () { window.__printControl(false) })
+  // If Paged.js couldn't load (offline), the document reads as one long page and prints as it is
+  window.addEventListener('load', function () { if (!window.PagedPolyfill) window.__printControl(true) })
 </script>
 <script src="https://cdn.jsdelivr.net/npm/pagedjs@0.4.3/dist/paged.polyfill.min.js"></script>
 </head>
@@ -261,6 +269,12 @@ const STYLE = `
   .block { break-inside: avoid; margin: 0 0 3mm; }
   s { color: var(--pencil); }
   .vision { font-size: 12.5pt; line-height: 1.5; }
+  /* Wireframes: scaled to the page, never taller than fits beside their heading */
+  figure.wire { margin: 3mm 0; text-align: center; }
+  svg.wireframe { display: block; margin: 0 auto; height: auto; }
+  svg.wireframe.desktop { width: 100%; max-height: 165mm; }
+  svg.wireframe.mobile { width: 62mm; max-height: 135mm; }
+  .wire-meta { display: flex; flex-wrap: wrap; gap: 1mm 5mm; color: var(--pencil); font-size: 8.5pt; margin: 1mm 0 2mm; }
   table.storymap { table-layout: fixed; font-size: 8.5pt; }
   table.storymap th, table.storymap td { padding: 1.5mm 1.5mm 0 0; vertical-align: top; text-transform: none; letter-spacing: 0; }
   table.storymap thead th { color: var(--marker); font-size: 8pt; font-weight: 700; padding-bottom: 1.5mm; }
@@ -274,6 +288,7 @@ const STYLE = `
 
   /* Without Paged.js (or while it loads) the document reads as one long page */
   body:not(:has(.pagedjs_pages)) { max-width: 190mm; margin: 0 auto; padding: 10mm 6mm 20mm; background: #fff; }
+  .print:disabled { background: #7a8291; cursor: progress; }
   .print { position: fixed; top: 14px; right: 14px; z-index: 10; padding: 9px 16px; border: 0; border-radius: 6px; background: var(--marker); color: #fff; font: 600 13px/1 -apple-system, "Segoe UI", Roboto, sans-serif; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,.2); }
   @media screen and (max-width: 640px) { .cols, .cols3, .cover dl { grid-template-columns: 1fr; } }
 `

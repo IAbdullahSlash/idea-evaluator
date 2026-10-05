@@ -1,5 +1,7 @@
 import { CRITERIA } from '@/lib/schemas/snapshot'
 import { numberStories, releaseOrder, type Brief } from '@/lib/schemas/brief'
+import type { Wireframes } from '@/lib/schemas/wireframes'
+import { screensTable, screenSection } from '@/lib/documents/screens'
 import { availableWeeks, formatMoney, formatWeeks, sumCosts, totalWeeks } from '@/lib/plan-math'
 import {
   arr,
@@ -39,6 +41,8 @@ export interface ReportInput {
   plan?: { stage3: any; stage4: any }
   /** The product vision and story map, once written on the Hand-off page. */
   brief?: Brief
+  /** The key screens, once drawn on the Hand-off page. */
+  wireframes?: Wireframes
 }
 
 const NOT_YET = 'Not written yet. It will be added to the report in a coming version.'
@@ -363,7 +367,12 @@ export function buildReport(input: ReportInput): string {
       storyMap(input),
       {
         title: 'Wireframes',
-        children: [{ title: 'Screens and flow', empty: NOT_YET }],
+        children: input.wireframes
+          ? [
+              { title: 'Screens and flow', body: screensTable(input.wireframes) + '<p class="meta">Low-fidelity sketches: they show what each screen holds and how screens connect, not the final design.</p>' },
+              ...input.wireframes.screens.map(screenSection),
+            ]
+          : [{ title: 'Screens and flow', empty: NOT_YET }],
       },
       plan(input, timeline),
       {

@@ -1,4 +1,6 @@
 import type { Srs } from '@/lib/schemas/srs'
+import type { Wireframes } from '@/lib/schemas/wireframes'
+import { screensTable, screenSection } from '@/lib/documents/screens'
 import { bullets, esc, keep, para, renderDocument, table, type DocSection } from '@/lib/documents/template'
 
 /**
@@ -24,7 +26,7 @@ const NFR_GROUPS: { title: string; match: (category: string) => boolean }[] = [
   { title: 'Business rules', match: (c) => kindIs(c, 'business', 'legal', 'compliance') },
 ]
 
-export function buildSrsDocument(srs: Srs, projectTitle: string): string {
+export function buildSrsDocument(srs: Srs, projectTitle: string, wireframes?: Wireframes): string {
   const today = new Date().toISOString().slice(0, 10)
   const nfrs = srs.nonFunctionalRequirements.map((r, i) => ({ ...r, id: `NFR-${i + 1}` }))
   const nfrTable = (items: typeof nfrs) => table(['ID', 'Category', 'Requirement'], items.map((r) => [`<b>${r.id}</b>`, esc(r.category), esc(r.requirement)]))
@@ -76,7 +78,15 @@ export function buildSrsDocument(srs: Srs, projectTitle: string): string {
     {
       title: 'External interface requirements',
       children: [
-        { title: 'User interfaces', body: interfaces('user', 'screen', 'ui'), empty: TBD },
+        {
+          title: 'User interfaces',
+          body:
+            interfaces('user', 'screen', 'ui') +
+            (wireframes ? screensTable(wireframes) + '<p class="meta">Each screen is sketched below as a low-fidelity wireframe.</p>' : ''),
+          empty: TBD,
+          // The screens sit under 3.1 (3.1.1, 3.1.2, …) so the standard's numbering stays fixed
+          children: wireframes?.screens.map(screenSection),
+        },
         { title: 'Hardware interfaces', body: interfaces('hardware', 'device') },
         { title: 'Software interfaces', body: interfaces('api', 'software', 'third', 'service', 'library') },
         { title: 'Communications interfaces', body: interfaces('communic', 'email', 'network', 'http', 'notification') },

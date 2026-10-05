@@ -12,6 +12,7 @@ import { buildSrsDocument } from "@/lib/documents/srs"
 import { downloadText, fileSlug, hireLinks, jiraCsv, openHtml } from "@/lib/handoff"
 import { srsSchema, type Srs } from "@/lib/schemas/srs"
 import { briefSchema, numberStories, type Brief } from "@/lib/schemas/brief"
+import { wireframesSchema, type Wireframes } from "@/lib/schemas/wireframes"
 import { planSchema, type Plan } from "@/lib/schemas/plan"
 import { CONTEXT_QUESTIONS, missingContext } from "@/lib/schemas/context"
 import { availableWeeks, formatMoney, formatWeeks, sumCosts, totalWeeks } from "@/lib/plan-math"
@@ -234,9 +235,10 @@ interface GitHubRepo {
 }
 
 // The documents the Hand-off page writes on request, and where
-type HandOffDoc = "brief" | "srs"
+type HandOffDoc = "brief" | "wireframes" | "srs"
 const HAND_OFF_DOCS = {
   brief: { url: "/api/brief", schema: briefSchema, name: "product vision and story map" },
+  wireframes: { url: "/api/wireframes", schema: wireframesSchema, name: "wireframes" },
   srs: { url: "/api/srs", schema: srsSchema, name: "requirements document" },
 } as const
 
@@ -299,8 +301,9 @@ export default function AnalysisPage() {
     }
     // Hand-off: everything else on the page is built from the earlier stages
     stage5?: {
-      // The Report's product vision and story map
+      // The Report's product vision and story map, and the key screens drawn from its stories
       brief?: Brief
+      wireframes?: Wireframes
       srs?: Srs
     }
   }>({})
@@ -379,8 +382,13 @@ export default function AnalysisPage() {
           // Older versions saved other hand-off data; keep only documents that still match their schema
           if (stages.stage5) {
             const brief = briefSchema.safeParse(stages.stage5.brief)
+            const wireframes = wireframesSchema.safeParse(stages.stage5.wireframes)
             const srs = srsSchema.safeParse(stages.stage5.srs)
-            stages.stage5 = { ...(brief.success ? { brief: brief.data } : {}), ...(srs.success ? { srs: srs.data } : {}) }
+            stages.stage5 = {
+              ...(brief.success ? { brief: brief.data } : {}),
+              ...(wireframes.success ? { wireframes: wireframes.data } : {}),
+              ...(srs.success ? { srs: srs.data } : {}),
+            }
           }
           setStageData(prev => ({ ...prev, ...stages }))
         }
@@ -798,6 +806,8 @@ export default function AnalysisPage() {
           // Writing it again asks for a new version instead of the cached one
           fresh: Boolean(stageData.stage5?.[doc]),
           existingSolutions: stageData.stage2?.existingSolutions,
+          // The story map's stories, so screens can cite them (US-1, US-2, …)
+          stories: stageData.stage5?.brief ? numberStories(stageData.stage5.brief) : [],
           plan: stageData.stage3 && stageData.stage4 && {
             scopeCuts: stageData.stage3.scopeCuts,
             versionMilestones: stageData.stage4.versionMilestones,
@@ -810,7 +820,11 @@ export default function AnalysisPage() {
       if (!response.ok) throw new Error(data?.error || `The ${name} couldn't be written this time. Please try again.`)
       const parsed = schema.safeParse(data)
       if (!parsed.success) throw new Error(`The ${name} came back incomplete. Please try again.`)
-      setStageData(prev => ({ ...prev, stage5: { ...prev.stage5, [doc]: parsed.data } }))
+      setStageData(prev => ({
+        ...prev,
+        // A new story map renumbers its stories, so wireframes citing the old numbers are dropped
+        stage5: { ...prev.stage5, [doc]: parsed.data, ...(doc === "brief" ? { wireframes: undefined } : {}) },
+      }))
     } catch (error) {
       const message =
         error instanceof DOMException && error.name === "TimeoutError"
@@ -2043,12 +2057,13 @@ export default function AnalysisPage() {
       quickWins: stageData.stage2?.quickWins,
       plan: stageData.stage3 && stageData.stage4 ? { stage3: stageData.stage3, stage4: stageData.stage4 } : undefined,
       brief: stageData.stage5?.brief,
+      wireframes: stageData.stage5?.wireframes,
     })
     setSavedInstead(openHtml(html, `${fileSlug(projectTitle())}-report.html`) ? null : "report")
   }
 
   const openSrs = (srs: Srs) => {
-    const html = buildSrsDocument(srs, projectTitle())
+    const html = buildSrsDocument(srs, projectTitle(), stageData.stage5?.wireframes)
     setSavedInstead(openHtml(html, `${fileSlug(projectTitle())}-srs.html`) ? null : "srs")
   }
 
@@ -2058,7 +2073,7 @@ export default function AnalysisPage() {
     ) : null
 
   // "Write …" / "Write it again", with its progress and error lines
-  const WriteButton = ({ doc, label }: { doc: HandOffDoc; label: string }) => {
+  const WriteButton = ({ doc, label, again = "Write it again" }: { doc: HandOffDoc; label: string; again?: string }) => {
     const written = Boolean(stageData.stage5?.[doc])
     const busy = writing === doc
     return (
@@ -2070,7 +2085,7 @@ export default function AnalysisPage() {
           disabled={writing !== null}
           className={cn("w-full justify-between", !written && "h-11 px-4")}
         >
-          {busy ? "Writing…" : written ? "Write it again" : label}
+          {busy ? "Writing…" : written ? again : label}
           {busy ? <Loader2 className="animate-spin" /> : written ? <RefreshCw /> : <ArrowRight />}
         </Button>
         {busy ? <p className="text-meta text-pencil">This can take up to a minute.</p> : null}
@@ -2083,6 +2098,7 @@ export default function AnalysisPage() {
     if (!analysis || !stageData.stage5) return null
     const srs = stageData.stage5.srs
     const brief = stageData.stage5.brief
+    const wireframes = stageData.stage5.wireframes
     const stories = brief ? numberStories(brief) : []
     const phases = stageData.stage3?.projectMilestones ?? []
     const taskCount = phases.reduce((n, p) => n + p.deliverables.length, 0)
@@ -2104,7 +2120,8 @@ export default function AnalysisPage() {
                   Open the report <FileText />
                 </Button>
               ) : null}
-              <WriteButton doc="brief" label="Write the vision and story map" />
+              <WriteButton doc="brief" label="Write the vision and story map" again="Rewrite the vision and map" />
+              {brief ? <WriteButton doc="wireframes" label="Draw the wireframes" again="Redraw the wireframes" /> : null}
               {!brief ? (
                 <Button variant="ghost" onClick={openReport} className="w-full justify-between text-ink-soft">
                   Open the report without them <FileText />
@@ -2117,7 +2134,7 @@ export default function AnalysisPage() {
           <SheetHeading>The report</SheetHeading>
           <p className="max-w-[60ch] text-[0.9375rem] leading-relaxed text-ink-soft">
             The evaluation and product brief as a paged document: executive summary, product vision, the marking and
-            market, a user story map, the plan with costs, and next steps, with a contents page. It opens in a new tab;
+            market, a user story map, wireframes of the key screens, the plan with costs, and next steps, with a contents page. It opens in a new tab;
             save it as a PDF from the print dialog.
           </p>
           {brief ? (
@@ -2131,6 +2148,13 @@ export default function AnalysisPage() {
                 {plural(stories.length, "user story", "user stories")} in {plural(brief.activities.length, "activity", "activities")} ·{" "}
                 {stories.filter((st) => st.release === stories[0]?.release).length} in the first release
               </p>
+              {wireframes ? (
+                <p className="text-meta text-pencil">
+                  Wireframes: {wireframes.screens.map((sc) => sc.name).join(", ")}
+                </p>
+              ) : (
+                <p className="text-meta text-pencil">Draw the wireframes next to add the key screens, sketched from these stories.</p>
+              )}
             </div>
           ) : (
             <p className="mt-3 max-w-[60ch] text-sm text-pencil">
