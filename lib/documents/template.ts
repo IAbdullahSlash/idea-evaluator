@@ -118,6 +118,10 @@ function number(sections: DocSection[], prefix = '', depth = 1): Numbered[] {
 const heading = (item: Numbered) =>
   item.depth === 1 && item.section.appendix ? `Appendix ${item.number}: ${esc(item.section.title)}` : esc(item.section.title)
 
+// A subsection this short stays on one page with its heading, so a heading is never left alone
+// at the foot of a page. Longer ones may break; Paged.js can't keep a heading with what follows.
+const KEEP_TOGETHER_CHARS = 2500
+
 function renderSection(item: Numbered, all: Numbered[]): string {
   const { section, depth } = item
   const tag = depth === 1 ? 'h2' : depth === 2 ? 'h3' : 'h4'
@@ -125,13 +129,10 @@ function renderSection(item: Numbered, all: Numbered[]): string {
   const body = section.body?.trim()
   // A leaf section with nothing to say keeps its place and says so; a parent's subsections speak for it
   const empty = !body && children.length === 0 ? `<p class="empty">${esc(section.empty ?? NONE)}</p>` : ''
-  return (
-    `<section class="d${depth}"><${tag} id="${item.id}">${section.appendix ? '' : `<span class="no">${item.number}</span> `}${heading(item)}</${tag}>` +
-    (body ?? '') +
-    empty +
-    children.map((c) => renderSection(c, all)).join('') +
-    '</section>'
-  )
+  const head = `<${tag} id="${item.id}">${section.appendix ? '' : `<span class="no">${item.number}</span> `}${heading(item)}</${tag}>`
+  const own = head + (body ?? '') + empty
+  const short = depth > 1 && children.length === 0 && own.length < KEEP_TOGETHER_CHARS
+  return `<section class="d${depth}">${short ? `<div class="block">${own}</div>` : own}${children.map((c) => renderSection(c, all)).join('')}</section>`
 }
 
 export function renderDocument(doc: DocumentSpec): string {
@@ -259,6 +260,16 @@ const STYLE = `
   .cols3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5mm; }
   .block { break-inside: avoid; margin: 0 0 3mm; }
   s { color: var(--pencil); }
+  .vision { font-size: 12.5pt; line-height: 1.5; }
+  table.storymap { table-layout: fixed; font-size: 8.5pt; }
+  table.storymap th, table.storymap td { padding: 1.5mm 1.5mm 0 0; vertical-align: top; text-transform: none; letter-spacing: 0; }
+  table.storymap thead th { color: var(--marker); font-size: 8pt; font-weight: 700; padding-bottom: 1.5mm; }
+  table.storymap thead th.task { width: 34%; color: var(--pencil); }
+  table.storymap tr.activity th { background: var(--ink); color: #fff; padding: 1.8mm 2mm; font-size: 9pt; border-bottom: 0; }
+  table.storymap tbody th.task { font-weight: 600; color: var(--ink); padding-left: 2mm; }
+  table.storymap td + td, table.storymap th.task + td { border-left: 1.5px dashed var(--rule); padding-left: 1.5mm; }
+  .card { background: #fff8d6; border: 1px solid #e8dc9c; border-radius: 1mm; padding: 1.5mm; margin-bottom: 1.5mm; line-height: 1.3; }
+  .card .id { display: block; font-size: 6.5pt; font-weight: 700; color: var(--pencil); }
   .colophon { margin-top: 10mm; padding-top: 3mm; border-top: 1px solid var(--rule); color: var(--pencil); font-size: 8.5pt; }
 
   /* Without Paged.js (or while it loads) the document reads as one long page */

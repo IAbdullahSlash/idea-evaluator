@@ -14,7 +14,7 @@ The evaluation runs in four stages. Each one opens only when you choose to conti
 1. **Snapshot** — A mark out of 10, worked out from six criteria (a real problem, worth solving, not already done, something new, within reach, someone wants it), each with its own mark and reason. Also a recommendation (Build / Narrow it down / Rethink / Drop), odds of success, an honest reality check, who it is for, and questions to ask yourself. If the idea is too vague to mark, it asks up to three follow-up questions first.
 2. **Summary** — Pros and cons, risks with severity, what people are discussing (Hacker News and Stack Exchange) and recent news coverage (Google News), quick wins, existing solutions, similar projects on GitHub, and an executive summary.
 3. **Plan** — Whether the scope fits your time, phases sized to it, scope cuts, the team, the stack, versions, security, and costs added up.
-4. **Hand-off** — A printable report of every page, a requirements document (SRS) to download, the plan as a Jira CSV, and searches for people with the plan's skills.
+4. **Hand-off** — Two paged documents to save as PDF: the Report (evaluation, product vision, user story map, plan) and the SRS (IEEE 830 outline); the plan as a Jira CSV; and searches for people with the plan's skills.
 
 ## Architecture
 
@@ -25,6 +25,7 @@ Browser (Next.js 14 App Router)
         │
         ├─ POST /api/analyze      Snapshot and Summary (validated against a schema)
         ├─ POST /api/stage-data   Plan (validated against a schema)
+        ├─ POST /api/brief        Product vision and user story map (validated against a schema)
         ├─ POST /api/srs          Requirements document (validated against a schema)
         ├─ POST /api/discussions  Hacker News, Stack Exchange, and Google News, filtered and summarised
         └─ POST /api/github-repos Similar repositories
@@ -100,6 +101,7 @@ app/
 └── api/
     ├── analyze/             # Snapshot and Summary
     ├── stage-data/          # Plan
+    ├── brief/               # Product vision and user story map
     ├── srs/                 # Requirements document
     ├── discussions/         # Discussions and news
     ├── github-repos/        # Similar repositories
@@ -111,10 +113,10 @@ components/
 └── *.tsx                    # Landing page sections
 lib/
 ├── llm.ts                   # Multi-key, multi-model AI router
-├── schemas/                 # Schemas: snapshot, plan, SRS, and the questions asked with the idea
+├── schemas/                 # Schemas: snapshot, plan, product brief, SRS, and the questions asked with the idea
+├── documents/               # Document template (fixed outline, Paged.js) and the Report and SRS layouts
 ├── evaluation-context.ts    # What earlier pages learned, as prompt text for the Plan and SRS
 ├── plan-math.ts             # Phase durations and costs added up
-├── report.ts                # The printable report, built in the browser
 ├── handoff.ts               # Jira CSV, hiring searches, downloads
 ├── hackernews.ts            # Hacker News search and comments
 ├── stackexchange.ts         # Stack Exchange questions and answers

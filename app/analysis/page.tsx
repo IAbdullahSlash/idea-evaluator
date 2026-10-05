@@ -11,6 +11,7 @@ import { buildReport } from "@/lib/documents/report"
 import { buildSrsDocument } from "@/lib/documents/srs"
 import { downloadText, fileSlug, hireLinks, jiraCsv, openHtml } from "@/lib/handoff"
 import { srsSchema, type Srs } from "@/lib/schemas/srs"
+import { briefSchema, numberStories, type Brief } from "@/lib/schemas/brief"
 import { planSchema, type Plan } from "@/lib/schemas/plan"
 import { CONTEXT_QUESTIONS, missingContext } from "@/lib/schemas/context"
 import { availableWeeks, formatMoney, formatWeeks, sumCosts, totalWeeks } from "@/lib/plan-math"
@@ -232,6 +233,13 @@ interface GitHubRepo {
   owner: string
 }
 
+// The documents the Hand-off page writes on request, and where
+type HandOffDoc = "brief" | "srs"
+const HAND_OFF_DOCS = {
+  brief: { url: "/api/brief", schema: briefSchema, name: "product vision and story map" },
+  srs: { url: "/api/srs", schema: srsSchema, name: "requirements document" },
+} as const
+
 // Loose match between a scope feature and the plan's copy of it in scopeCuts
 const sameFeature = (a: string, b: string) => {
   const norm = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
@@ -291,6 +299,8 @@ export default function AnalysisPage() {
     }
     // Hand-off: everything else on the page is built from the earlier stages
     stage5?: {
+      // The Report's product vision and story map
+      brief?: Brief
       srs?: Srs
     }
   }>({})
@@ -311,9 +321,9 @@ export default function AnalysisPage() {
   const [analyzing, setAnalyzing] = useState(false)
   // Why the last attempt to mark the idea failed, shown on the page with a retry
   const [analyzeError, setAnalyzeError] = useState<string | null>(null)
-  // Writing the requirements document on the Hand-off page, and why it failed
-  const [srsLoading, setSrsLoading] = useState(false)
-  const [srsError, setSrsError] = useState<string | null>(null)
+  // The Hand-off document being written, and why the last attempt at each failed
+  const [writing, setWriting] = useState<HandOffDoc | null>(null)
+  const [writeErrors, setWriteErrors] = useState<Partial<Record<HandOffDoc, string>>>({})
   // A document saved as a file because the browser blocked its new tab
   const [savedInstead, setSavedInstead] = useState<"report" | "srs" | null>(null)
   // Remaking the plan from the Plan page, and why it failed
@@ -366,10 +376,11 @@ export default function AnalysisPage() {
               delete stages.stage5
             }
           }
-          // Older versions saved other hand-off data; keep only a valid requirements document
+          // Older versions saved other hand-off data; keep only documents that still match their schema
           if (stages.stage5) {
+            const brief = briefSchema.safeParse(stages.stage5.brief)
             const srs = srsSchema.safeParse(stages.stage5.srs)
-            stages.stage5 = srs.success ? { srs: srs.data } : {}
+            stages.stage5 = { ...(brief.success ? { brief: brief.data } : {}), ...(srs.success ? { srs: srs.data } : {}) }
           }
           setStageData(prev => ({ ...prev, ...stages }))
         }
@@ -772,17 +783,21 @@ export default function AnalysisPage() {
     }
   }
 
-  // Write (or rewrite) the requirements document from the evaluation and the plan
-  const writeSrs = async () => {
-    setSrsLoading(true)
-    setSrsError(null)
+  // Write (or rewrite) a Hand-off document from the evaluation and the plan, and keep it with them
+  const writeDocument = async (doc: HandOffDoc) => {
+    const { url, schema, name } = HAND_OFF_DOCS[doc]
+    setWriting(doc)
+    setWriteErrors(prev => ({ ...prev, [doc]: undefined }))
     try {
-      const response = await fetch("/api/srs", {
+      const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: AbortSignal.timeout(100_000),
         body: JSON.stringify({
           ...evaluationBody(),
+          // Writing it again asks for a new version instead of the cached one
+          fresh: Boolean(stageData.stage5?.[doc]),
+          existingSolutions: stageData.stage2?.existingSolutions,
           plan: stageData.stage3 && stageData.stage4 && {
             scopeCuts: stageData.stage3.scopeCuts,
             versionMilestones: stageData.stage4.versionMilestones,
@@ -792,20 +807,20 @@ export default function AnalysisPage() {
         }),
       })
       const data = await response.json().catch(() => null)
-      if (!response.ok) throw new Error(data?.error || "The requirements document couldn't be written this time. Please try again.")
-      const srs = srsSchema.safeParse(data)
-      if (!srs.success) throw new Error("The requirements document came back incomplete. Please try again.")
-      setStageData(prev => ({ ...prev, stage5: { ...prev.stage5, srs: srs.data } }))
+      if (!response.ok) throw new Error(data?.error || `The ${name} couldn't be written this time. Please try again.`)
+      const parsed = schema.safeParse(data)
+      if (!parsed.success) throw new Error(`The ${name} came back incomplete. Please try again.`)
+      setStageData(prev => ({ ...prev, stage5: { ...prev.stage5, [doc]: parsed.data } }))
     } catch (error) {
-      setSrsError(
+      const message =
         error instanceof DOMException && error.name === "TimeoutError"
-          ? "Writing the document took too long. Please try again."
+          ? `Writing the ${name} took too long. Please try again.`
           : error instanceof Error && error.message
             ? error.message
             : "Couldn't reach the server. Check your connection and try again."
-      )
+      setWriteErrors(prev => ({ ...prev, [doc]: message }))
     } finally {
-      setSrsLoading(false)
+      setWriting(null)
     }
   }
 
@@ -2027,6 +2042,7 @@ export default function AnalysisPage() {
       existingSolutions: stageData.stage2?.existingSolutions,
       quickWins: stageData.stage2?.quickWins,
       plan: stageData.stage3 && stageData.stage4 ? { stage3: stageData.stage3, stage4: stageData.stage4 } : undefined,
+      brief: stageData.stage5?.brief,
     })
     setSavedInstead(openHtml(html, `${fileSlug(projectTitle())}-report.html`) ? null : "report")
   }
@@ -2041,9 +2057,33 @@ export default function AnalysisPage() {
       <p role="status" className="text-meta text-ink-soft">The browser blocked the new tab, so it was saved as a file instead. Open the file to print it.</p>
     ) : null
 
+  // "Write …" / "Write it again", with its progress and error lines
+  const WriteButton = ({ doc, label }: { doc: HandOffDoc; label: string }) => {
+    const written = Boolean(stageData.stage5?.[doc])
+    const busy = writing === doc
+    return (
+      <>
+        <Button
+          variant={written ? "outline" : "default"}
+          size={written ? "default" : "lg"}
+          onClick={() => writeDocument(doc)}
+          disabled={writing !== null}
+          className={cn("w-full justify-between", !written && "h-11 px-4")}
+        >
+          {busy ? "Writing…" : written ? "Write it again" : label}
+          {busy ? <Loader2 className="animate-spin" /> : written ? <RefreshCw /> : <ArrowRight />}
+        </Button>
+        {busy ? <p className="text-meta text-pencil">This can take up to a minute.</p> : null}
+        {writeErrors[doc] && !busy ? <p role="alert" className="text-meta font-medium text-marker">{writeErrors[doc]}</p> : null}
+      </>
+    )
+  }
+
   const renderDeepResources = () => {
     if (!analysis || !stageData.stage5) return null
     const srs = stageData.stage5.srs
+    const brief = stageData.stage5.brief
+    const stories = brief ? numberStories(brief) : []
     const phases = stageData.stage3?.projectMilestones ?? []
     const taskCount = phases.reduce((n, p) => n + p.deliverables.length, 0)
     const hiring = hireLinks(stageData.stage3?.teamRoles ?? [])
@@ -2059,9 +2099,17 @@ export default function AnalysisPage() {
         <SheetRow
           margin={
             <div className="space-y-2">
-              <Button onClick={openReport} size="lg" className="h-11 w-full justify-between px-4">
-                Open the report <FileText />
-              </Button>
+              {brief ? (
+                <Button onClick={openReport} size="lg" className="h-11 w-full justify-between px-4">
+                  Open the report <FileText />
+                </Button>
+              ) : null}
+              <WriteButton doc="brief" label="Write the vision and story map" />
+              {!brief ? (
+                <Button variant="ghost" onClick={openReport} className="w-full justify-between text-ink-soft">
+                  Open the report without them <FileText />
+                </Button>
+              ) : null}
               <SavedInsteadNote doc="report" />
             </div>
           }
@@ -2069,9 +2117,26 @@ export default function AnalysisPage() {
           <SheetHeading>The report</SheetHeading>
           <p className="max-w-[60ch] text-[0.9375rem] leading-relaxed text-ink-soft">
             The evaluation and product brief as a paged document: executive summary, product vision, the marking and
-            market, risks, the plan with costs, and next steps, with a contents page. It opens in a new tab; save it as a
-            PDF from the print dialog.
+            market, a user story map, the plan with costs, and next steps, with a contents page. It opens in a new tab;
+            save it as a PDF from the print dialog.
           </p>
+          {brief ? (
+            <div className="mt-5 space-y-3">
+              <p className="max-w-[68ch] border-l-2 border-marker pl-3 text-[0.9375rem] leading-relaxed text-ink">
+                For {brief.vision.targetUsers} who {brief.vision.need}, <span className="font-semibold">{brief.vision.productName}</span> is a{" "}
+                {brief.vision.category} that {brief.vision.benefit}.
+              </p>
+              <p className="text-meta text-pencil tabular">
+                {plural(brief.personas.length, "persona")} · {plural(brief.goals.length, "goal")} ·{" "}
+                {plural(stories.length, "user story", "user stories")} in {plural(brief.activities.length, "activity", "activities")} ·{" "}
+                {stories.filter((st) => st.release === stories[0]?.release).length} in the first release
+              </p>
+            </div>
+          ) : (
+            <p className="mt-3 max-w-[60ch] text-sm text-pencil">
+              Write the product vision and the user story map first, so the report includes them.
+            </p>
+          )}
         </SheetRow>
 
         <SheetRow
@@ -2082,18 +2147,7 @@ export default function AnalysisPage() {
                   Open the SRS <FileText />
                 </Button>
               ) : null}
-              <Button
-                variant={srs ? "outline" : "default"}
-                size={srs ? "default" : "lg"}
-                onClick={writeSrs}
-                disabled={srsLoading}
-                className={cn("w-full justify-between", !srs && "h-11 px-4")}
-              >
-                {srsLoading ? "Writing the document…" : srs ? "Write it again" : "Write the SRS"}
-                {srsLoading ? <Loader2 className="animate-spin" /> : srs ? <RefreshCw /> : <ArrowRight />}
-              </Button>
-              {srsLoading ? <p className="text-meta text-pencil">This can take up to a minute.</p> : null}
-              {srsError && !srsLoading ? <p role="alert" className="text-meta font-medium text-marker">{srsError}</p> : null}
+              <WriteButton doc="srs" label="Write the SRS" />
               <SavedInsteadNote doc="srs" />
             </div>
           }

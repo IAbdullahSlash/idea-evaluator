@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
   for (let attempt = 1; attempt <= 2; attempt++) {
     let raw: unknown
     try {
-      const reply = await generateJsonWithMeta<unknown>(prompt, { tier: "quality", exclude: tried, cache: attempt === 1 })
+      const reply = await generateJsonWithMeta<unknown>(prompt, { tier: "quality", exclude: tried, cache: attempt === 1 && !body.fresh })
       raw = reply.data
       tried.push(reply.model.replace(" (cached)", ""))
     } catch (error) {

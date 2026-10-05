@@ -1,4 +1,5 @@
 import { CRITERIA } from '@/lib/schemas/snapshot'
+import { numberStories, releaseOrder, type Brief } from '@/lib/schemas/brief'
 import { availableWeeks, formatMoney, formatWeeks, sumCosts, totalWeeks } from '@/lib/plan-math'
 import {
   arr,
@@ -36,6 +37,8 @@ export interface ReportInput {
   existingSolutions?: any[]
   quickWins?: any[]
   plan?: { stage3: any; stage4: any }
+  /** The product vision and story map, once written on the Hand-off page. */
+  brief?: Brief
 }
 
 const NOT_YET = 'Not written yet. It will be added to the report in a coming version.'
@@ -68,15 +71,94 @@ function productVision(input: ReportInput): DocSection {
   const s = input.snapshot ?? {}
   const users = s.targetUsersMarketFit ?? {}
   const rubric = s.rubric ?? {}
+  const b = input.brief
+  const v = b?.vision
   return {
     title: 'Product vision',
     children: [
-      { title: 'Vision statement', empty: NOT_YET },
-      { title: 'Target users', body: para(users.primaryUsers) },
-      { title: 'Problem', body: para(rubric.realProblem?.reason) + para(rubric.worthSolving?.reason) },
-      { title: 'Goals', empty: NOT_YET },
-      { title: 'Non-goals', empty: NOT_YET },
-      { title: 'Success measures', body: para(users.userValidation), empty: NOT_YET },
+      {
+        title: 'Vision statement',
+        body: v
+          ? `<div class="callout vision">For <b>${esc(v.targetUsers)}</b> who ${esc(v.need)}, <b>${esc(v.productName)}</b> is a ${esc(v.category)} that <b>${esc(v.benefit)}</b>. Unlike ${esc(v.alternative)}, it ${esc(v.difference)}.</div>`
+          : '',
+        empty: NOT_YET,
+      },
+      {
+        title: 'Target users',
+        body: b?.personas.length
+          ? table(['Persona', 'Who they are', 'What they want'], b.personas.map((p) => [`<b>${esc(p.name)}</b>`, esc(p.description), bullets(p.goals)]))
+          : para(users.primaryUsers),
+      },
+      { title: 'Problem', body: b ? para(b.problem) : para(rubric.realProblem?.reason) + para(rubric.worthSolving?.reason) },
+      { title: 'Goals', body: bullets(b?.goals ?? []), empty: NOT_YET },
+      { title: 'Non-goals', body: bullets(b?.nonGoals ?? []), empty: b ? undefined : NOT_YET },
+      {
+        title: 'Success measures',
+        body: b?.successMeasures.length
+          ? table(['Measure', 'Target'], b.successMeasures.map((m) => [esc(m.measure), `<b>${esc(m.target)}</b>`]))
+          : para(users.userValidation),
+        empty: NOT_YET,
+      },
+    ],
+  }
+}
+
+// "As a gym owner, I want to export reports so that …" → "Export reports", for the map's cards
+const want = (story: string) => {
+  const m = story.match(/I want (?:the (?:system|app) to |to )?(.+?)(?:,? so that\b|$)/i)
+  const core = (m?.[1] ?? story).trim().replace(/[.]$/, '')
+  return core.charAt(0).toUpperCase() + core.slice(1)
+}
+
+function storyMap(input: ReportInput): DocSection {
+  const b = input.brief
+  if (!b) return { title: 'User story map', children: [{ title: 'The map', empty: NOT_YET }, { title: 'Releases', empty: NOT_YET }] }
+
+  const versions = arr(input.plan?.stage4?.versionMilestones)
+  const releases = releaseOrder(b, versions.map((v) => str(v.version)))
+  const stories = numberStories(b)
+  const cell = (task: string, activity: string, release: string) =>
+    stories
+      .filter((st) => st.task === task && st.activity === activity && st.release === release)
+      .map((st) => `<div class="card"><span class="id">${st.id}</span>${esc(want(st.title))}</div>`)
+      .join('')
+  const releaseNote = (r: string) => {
+    const v = versions.find((x) => str(x.version) === r)
+    return v ? `${esc(r)}${str(v.timeline) ? ` · ${esc(v.timeline)}` : ''}` : r === 'Later' ? 'Later · not in this plan' : esc(r)
+  }
+
+  // Activities run down the page in the order users go through them, and each release is a column,
+  // so the map fits a portrait page however many tasks there are (Chrome can't print a landscape page among portrait ones)
+  const map =
+    `<p class="meta">Read top to bottom: what users do, in order. Each column is a release; the first is the smallest version people can use.</p>` +
+    `<table class="storymap"><thead><tr><th class="task">Activity and task</th>${releases.map((r) => `<th class="rel">${releaseNote(r)}</th>`).join('')}</tr></thead><tbody>` +
+    b.activities
+      .map(
+        (a) =>
+          `<tr class="activity"><th colspan="${releases.length + 1}">${esc(a.name)}</th></tr>` +
+          a.tasks.map((t) => `<tr><th class="task">${esc(t.name)}</th>${releases.map((r) => `<td>${cell(t.name, a.name, r)}</td>`).join('')}</tr>`).join('')
+      )
+      .join('') +
+    `</tbody></table>`
+
+  return {
+    title: 'User story map',
+    children: [
+      { title: 'The map', body: map },
+      {
+        title: 'Releases',
+        body: releases
+          .map((r) =>
+            keep(
+              releaseNote(r),
+              table(
+                ['ID', 'Story', 'Activity'],
+                stories.filter((st) => st.release === r).map((st) => [`<b>${st.id}</b>`, esc(st.title), esc(st.activity)])
+              )
+            )
+          )
+          .join(''),
+      },
     ],
   }
 }
@@ -278,13 +360,7 @@ export function buildReport(input: ReportInput): string {
       executiveSummary(input),
       productVision(input),
       evaluation(input),
-      {
-        title: 'User story map',
-        children: [
-          { title: 'The map', empty: NOT_YET },
-          { title: 'Releases', empty: NOT_YET },
-        ],
-      },
+      storyMap(input),
       {
         title: 'Wireframes',
         children: [{ title: 'Screens and flow', empty: NOT_YET }],
