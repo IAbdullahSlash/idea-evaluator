@@ -39,7 +39,7 @@ export const startInput = z.object({
 
 const mark = z.object({
   score: z.number().int().min(1).max(10).describe('1-10, 10 is best.'),
-  reason: sentence('One short sentence explaining the mark.'),
+  reason: sentence('2-3 sentences: the reasoning for this mark, and the evidence or assumption behind it.'),
 })
 
 export const snapshotInput = z.object({
@@ -60,19 +60,19 @@ export const snapshotInput = z.object({
   successProbability: z.number().int().min(5).max(95).describe('Chance of success in percent; must agree with the marks.'),
   detectedDomain: sentence('Domain category.'),
   requiredExperience: level,
-  honestAiFeedback: sentence('A direct, honest assessment of feasibility and the real challenges (2-4 sentences).'),
+  honestAiFeedback: sentence('A full, honest paragraph (5-8 sentences): is it feasible with current technology, what are the real obstacles, and how hard is it to build and maintain?'),
   targetUsersMarketFit: z.object({
-    primaryUsers: sentence('The specific people or groups who would find this valuable.'),
-    marketDemand: sentence('How much demand there is today.'),
-    userValidation: sentence('How to check that users want it.'),
+    primaryUsers: sentence('2-3 sentences: the specific people or groups who would find this valuable, and what they do today instead.'),
+    marketDemand: sentence('2-3 sentences: how much demand there is today, and the signs of it.'),
+    userValidation: sentence('2-3 sentences: concrete ways to check that users want it before building much.'),
   }),
-  aiVerdict: sentence('The overall recommendation with clear next steps (1-2 sentences).'),
+  aiVerdict: sentence('2-4 sentences: the overall recommendation and clear next steps.'),
   searchQueries: z.object({
     github: sentence('2-4 keywords to find similar open-source projects on GitHub.'),
     discussions: sentence('2-3 everyday words naming the problem or kind of product, as an ordinary user would say it. Never technical terms.'),
   }),
   selfQuestions: z
-    .array(z.object({ question: sentence('A question the developer must answer to make THIS idea clearer.'), why: sentence('What the answer decides.') }))
+    .array(z.object({ question: sentence('A question the developer must answer to make THIS idea clearer.'), why: sentence('1-2 sentences: what the answer decides.') }))
     .min(3)
     .max(5),
 })
@@ -95,19 +95,19 @@ export const summaryInput = z.object({
   difficultyLevel: level,
   estimatedTimeframe: sentence('A conservative build-time estimate with buffer.'),
   successProbability: z.number().int().min(10).max(95),
-  executiveSummary: sentence('3-4 sentences: the overall verdict, the main reason, and the recommended next step.'),
-  pros: z.array(z.string()).min(3).max(4).describe('Short points on what is good about the idea.'),
-  cons: z.array(z.string()).min(3).max(4).describe('Downsides of the idea itself (effort, cost, competition, adoption), not repeating the risks.'),
+  executiveSummary: sentence('4-6 sentences: the overall verdict, the main reasons for it, the biggest risk, and the recommended next step.'),
+  pros: z.array(z.string()).min(3).max(5).describe('What is good about the idea; each 1-2 sentences: the point and why it matters.'),
+  cons: z.array(z.string()).min(3).max(5).describe('Downsides of the idea itself (effort, cost, competition, adoption), not repeating the risks; each 1-2 sentences.'),
   potentialChallenges: z.object({
-    technicalRisks: sentence('Specific technical challenges and development risks.'),
-    usabilityIssues: sentence('Usability, security, and privacy problems users would hit.'),
-    marketRisks: sentence('Competition and market risks.'),
+    technicalRisks: sentence('3-5 sentences: the specific technical challenges, why they apply to this idea, and how to reduce them.'),
+    usabilityIssues: sentence('3-5 sentences: the usability, security, and privacy problems users would hit, and how to reduce them.'),
+    marketRisks: sentence('3-5 sentences: the competition and market risks, why they matter here, and how to reduce them.'),
   }),
   riskSeverity: z
     .object({ technical: severity, usability: severity, market: severity })
     .describe('"high" only when the risk could stop the project on its own.'),
   quickWins: z
-    .array(z.object({ title: sentence('A short action.'), description: sentence('What to do and why.'), timeEstimate: sentence('e.g. "2 days".') }))
+    .array(z.object({ title: sentence('A short action.'), description: sentence('2-3 sentences: what to do, how, and what it proves.'), timeEstimate: sentence('e.g. "2 days".') }))
     .min(2)
     .max(3)
     .describe('Concrete things this developer can do in the next week or two.'),
@@ -116,8 +116,8 @@ export const summaryInput = z.object({
       z.object({
         name: sentence('A real product, app, or open-source project. Never invent one.'),
         url: z.string().describe('Its official homepage if you are sure of it, otherwise "". Links are checked.'),
-        description: sentence('What it does.'),
-        difference: sentence('How this idea differs from it.'),
+        description: sentence('1-2 sentences: what it does and who uses it.'),
+        difference: sentence('1-2 sentences: how this idea differs, and what to learn from it.'),
       })
     )
     .min(2)
@@ -133,11 +133,11 @@ export const summaryInput = z.object({
     niceToHaveFeatures: z.array(z.string()).max(5),
     constraints: z.array(z.string()).max(5),
   }),
-  recommendations: z.array(z.string()).max(5),
+  recommendations: z.array(z.string()).max(5).describe('3-5 actionable next steps, each a full sentence.'),
   market: z
     .object({
       discussions: z
-        .array(z.object({ id: sentence('A discussion id from research_market, e.g. "hn-123".'), says: sentence('1-2 sentences on what people said that matters for this idea.') }))
+        .array(z.object({ id: sentence('A discussion id from research_market, e.g. "hn-123".'), says: sentence('2-3 sentences on what people said that matters for this idea: pain points, workarounds, tools, doubts.') }))
         .max(3)
         .describe('The relevant discussions only (about the same problem or audience). Empty if none are.'),
       news: z
@@ -156,7 +156,7 @@ export const planInput = z.object({
   evaluationId: id,
   timelineFit: z.object({
     verdict: z.enum(TIMELINE_FIT),
-    note: sentence('Does the must-have scope fit the time the builder has, and if not, what to cut.'),
+    note: sentence('2-3 sentences: does the must-have scope fit the time the builder has, what makes it tight, and what to cut if needed.'),
   }),
   scopeCuts: list('Every must-have or nice-to-have feature this plan does not build, copied exactly as written in the Summary. Empty if all are built.'),
   projectMilestones: z
@@ -176,12 +176,12 @@ export const planInput = z.object({
         role: z.string(),
         fteEstimate: z.number().min(0).max(3).describe('Share of one full-time person.'),
         skills: z.array(z.string()),
-        description: z.string(),
+        description: z.string().describe('1-2 sentences: what this role does on this project.'),
       })
     )
     .describe('The roles the work needs; the total should be what this builder or a small team can give. No managers for a solo or student project.'),
-  sdlcMapping: sentence('How to work, in 2-4 sentences, lightweight and specific.'),
-  qaApproach: sentence('How to test and release, in 2-4 sentences.'),
+  sdlcMapping: sentence('How to work, in 4-6 sentences: the rhythm (e.g. weekly cycles), how work is tracked, how feedback from users comes in. Lightweight and specific.'),
+  qaApproach: sentence('How to test and release, in 4-6 sentences: what is tested by hand and automatically, with whom, and how releases go out.'),
   techRoadmap: z
     .array(
       z.object({
@@ -193,7 +193,7 @@ export const planInput = z.object({
     )
     .min(1),
   versionMilestones: z
-    .array(z.object({ version: z.string(), timeline: z.string(), description: z.string(), features: z.array(z.string()) }))
+    .array(z.object({ version: z.string(), timeline: z.string(), description: z.string().describe('1-2 sentences: who it is for and what it proves.'), features: z.array(z.string()) }))
     .min(2)
     .max(3)
     .describe('The first is the smallest thing users can try, matching the must-have features.'),

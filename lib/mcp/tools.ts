@@ -11,7 +11,17 @@ import { searchRepos, type Repo } from '@/lib/github'
 import { availableWeeks, formatMoney, formatWeeks, sumCosts, totalWeeks } from '@/lib/plan-math'
 import { getEvaluation, newEvaluationId, saveEvaluation, type StoredEvaluation } from '@/lib/store'
 import { planInput, researchInput, snapshotInput, startInput, summaryInput } from '@/lib/mcp/contracts'
-import { HANDOFF_GUIDE, PLAN_GUIDE, RESEARCH_GUIDE, SERVER_INSTRUCTIONS, SNAPSHOT_GUIDE, SUMMARY_GUIDE } from '@/lib/mcp/guide'
+import {
+  HANDOFF_GUIDE,
+  PLAN_GUIDE,
+  PLAN_WRITEUP,
+  RESEARCH_GUIDE,
+  SERVER_INSTRUCTIONS,
+  SNAPSHOT_GUIDE,
+  SNAPSHOT_WRITEUP,
+  SUMMARY_GUIDE,
+  SUMMARY_WRITEUP,
+} from '@/lib/mcp/guide'
 
 /**
  * The Idea Evaluator's MCP tools. The user's own AI does the thinking; these
@@ -131,7 +141,7 @@ export function registerTools(server: McpServer, origin: string): void {
       const failed = await store(next)
       if (failed) return failed
       return ok(
-        `Snapshot saved: ${snapshot.feasibilityScore}/10 overall (the average of the six criteria), verdict "${snapshot.recommendation}", ${snapshot.successProbability}% chance of success.\nLink: ${link(evaluationId)}\n\nShow the user the mark, the verdict, and the weakest criteria, give them the link, and ask whether to continue to the Summary. If they want to: ${RESEARCH_GUIDE}`
+        `Snapshot saved: ${snapshot.feasibilityScore}/10 overall (the average of the six criteria), verdict "${snapshot.recommendation}", ${snapshot.successProbability}% chance of success.\nLink: ${link(evaluationId)}\n\n${SNAPSHOT_WRITEUP}\n\nIf they want to continue: ${RESEARCH_GUIDE}`
       )
     }
   )
@@ -231,7 +241,7 @@ export function registerTools(server: McpServer, origin: string): void {
         `Summary saved: ${summary.feasibilityScore}/10 on re-marking, ${threads.length} discussions and ${news.length} news stories kept.` +
           (unknown.length ? ` Ignored ids not in the research results: ${unknown.join(', ')}.` : '') +
           (dropped ? ` ${dropped} existing-solution link(s) didn't open and were removed.` : '') +
-          `\nLink: ${link(evaluationId)}\n\nShow the user the verdict, the biggest risk, and what people are saying, give them the link, and ask whether to continue to the Plan. If they want to: ${PLAN_GUIDE}`
+          `\nLink: ${link(evaluationId)}\n\n${SUMMARY_WRITEUP}\n\nIf they want to continue: ${PLAN_GUIDE}`
       )
     }
   )
@@ -270,7 +280,7 @@ export function registerTools(server: McpServer, origin: string): void {
           (needed !== null ? `Phases add up to ${formatWeeks(needed)}${has !== null ? ` of the ${evaluation.formData.timeline} available` : ''}. ` : 'Some phase durations could not be read, so the weeks were not added up; use "N days" or "N weeks". ') +
           (total ? `Running cost at the start: ${formatMoney(total)}. ` : 'Some costs could not be read, so no total was added up; use "$N/month", "$N/year", or "$N once". ') +
           (overrun ? `\nThe phases don't fit the time available, so the plan is marked "More than the time you have". Consider cutting scope (list the cut features in scopeCuts) and calling save_plan again.` : '') +
-          `\nLink: ${link(evaluationId)}\n\n${HANDOFF_GUIDE}`
+          `\nLink: ${link(evaluationId)}\n\n${PLAN_WRITEUP}\n\n${HANDOFF_GUIDE}`
       )
     }
   )
