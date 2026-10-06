@@ -1,6 +1,7 @@
 import { createMcpHandler } from "mcp-handler"
 import { registerTools } from "@/lib/mcp/tools"
 import { SERVER_INSTRUCTIONS } from "@/lib/mcp/guide"
+import { checkMcpRequest } from "@/lib/rate-limit"
 
 /**
  * The Idea Evaluator's MCP server, for ChatGPT, Claude, Gemini, and other AI
@@ -25,6 +26,11 @@ function handlerFor(origin: string) {
   return handler
 }
 
-const handle = (request: Request) => handlerFor(new URL(request.url).origin)(request)
+// Size and per-IP rate limits come first: the tools are public and need no account
+async function handle(request: Request) {
+  const refused = await checkMcpRequest(request)
+  if (refused) return refused
+  return handlerFor(new URL(request.url).origin)(request)
+}
 
 export { handle as GET, handle as POST, handle as DELETE }

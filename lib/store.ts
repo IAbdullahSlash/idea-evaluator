@@ -14,7 +14,7 @@ const TTL_SECONDS = 90 * 24 * 60 * 60
 const key = (id: string) => `evaluation:${id}`
 
 let client: Redis | null = null
-function redis(): Redis {
+export function redis(): Redis {
   if (client) return client
   const url = process.env.KV_REST_API_URL ?? process.env.UPSTASH_REDIS_REST_URL
   const token = process.env.KV_REST_API_TOKEN ?? process.env.UPSTASH_REDIS_REST_TOKEN

@@ -4,6 +4,7 @@ import { Navbar } from "@/components/Navbar"
 import { Hero } from "@/components/Hero"
 import { Features } from "@/components/Features"
 import { HowItWorks } from "@/components/HowItWorks"
+import { ConnectAI } from "@/components/ConnectAI"
 import { CTA } from "@/components/CTA"
 import { ExampleEvaluation } from "@/components/ExampleEvaluation"
 import { Audiences } from "@/components/Audiences"
@@ -18,6 +19,7 @@ export default function Home() {
         <Hero />
         <ExampleEvaluation />
         <HowItWorks />
+        <ConnectAI />
         <Audiences />
         <Features />
         <FAQ />
