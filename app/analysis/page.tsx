@@ -2221,7 +2221,7 @@ export default function AnalysisPage() {
               {brief ? <WriteButton doc="wireframes" label="Draw the wireframes" again="Redraw the wireframes" /> : null}
               {!brief ? (
                 <Button variant="ghost" onClick={openReport} className="w-full justify-between text-ink-soft">
-                  Open the report without them <FileText />
+                  {viewing ? "Open the report" : "Open the report without them"} <FileText />
                 </Button>
               ) : null}
               <SavedInsteadNote doc="report" />
