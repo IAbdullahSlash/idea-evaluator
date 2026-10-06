@@ -9,7 +9,10 @@ import { gatherMarket, threadFrom, type Candidate } from '@/lib/market'
 import type { NewsStory } from '@/lib/news'
 import { searchRepos, type Repo } from '@/lib/github'
 import { availableWeeks, formatMoney, formatWeeks, sumCosts, totalWeeks } from '@/lib/plan-math'
-import { getEvaluation, newEvaluationId, saveEvaluation, type StoredEvaluation } from '@/lib/store'
+import { newEvaluationId, type StoredEvaluation } from '@/lib/store'
+import { clip, fail, isFail, load, ok, store } from '@/lib/mcp/helpers'
+import { registerDocumentTools } from '@/lib/mcp/document-tools'
+import { BRIEF_GUIDE, DOCUMENTS_OFFER } from '@/lib/mcp/document-guide'
 import { planInput, researchInput, snapshotInput, startInput, summaryInput } from '@/lib/mcp/contracts'
 import {
   HANDOFF_GUIDE,
@@ -30,37 +33,11 @@ import {
  * /e/<id>. No AI runs here, so every call is quick.
  */
 
-interface Research {
+export interface Research {
   reachable: boolean
   candidates: Candidate[]
   stories: NewsStory[]
   repos: Repo[]
-}
-
-const ok = (text: string) => ({ content: [{ type: 'text' as const, text }] })
-const fail = (text: string) => ({ content: [{ type: 'text' as const, text }], isError: true })
-const NOT_FOUND = 'That evaluationId is unknown or has expired. Call start_evaluation to begin again.'
-const clip = (t: string, max: number) => (t.length > max ? `${t.slice(0, max - 1)}…` : t)
-
-/** Load an evaluation for a tool, or the reply explaining why it can't continue. */
-async function load(id: string): Promise<StoredEvaluation | ReturnType<typeof fail>> {
-  try {
-    return (await getEvaluation(id)) ?? fail(NOT_FOUND)
-  } catch (error) {
-    console.error('[mcp] Storage failed:', error)
-    return fail('The Idea Evaluator could not reach its storage. Please try again in a moment.')
-  }
-}
-const isFail = (x: unknown): x is ReturnType<typeof fail> => Boolean(x && typeof x === 'object' && 'isError' in x)
-
-async function store(e: StoredEvaluation) {
-  try {
-    await saveEvaluation(e)
-    return null
-  } catch (error) {
-    console.error('[mcp] Storage failed:', error)
-    return fail('The Idea Evaluator could not save this stage. Please call the tool again in a moment.')
-  }
 }
 
 export function registerTools(server: McpServer, origin: string): void {
@@ -280,10 +257,12 @@ export function registerTools(server: McpServer, origin: string): void {
           (needed !== null ? `Phases add up to ${formatWeeks(needed)}${has !== null ? ` of the ${evaluation.formData.timeline} available` : ''}. ` : 'Some phase durations could not be read, so the weeks were not added up; use "N days" or "N weeks". ') +
           (total ? `Running cost at the start: ${formatMoney(total)}. ` : 'Some costs could not be read, so no total was added up; use "$N/month", "$N/year", or "$N once". ') +
           (overrun ? `\nThe phases don't fit the time available, so the plan is marked "More than the time you have". Consider cutting scope (list the cut features in scopeCuts) and calling save_plan again.` : '') +
-          `\nLink: ${link(evaluationId)}\n\n${PLAN_WRITEUP}\n\n${HANDOFF_GUIDE}`
+          `\nLink: ${link(evaluationId)}\n\n${PLAN_WRITEUP}\n\n${HANDOFF_GUIDE}\n\n${DOCUMENTS_OFFER}\n\nIf they want them: ${BRIEF_GUIDE}`
       )
     }
   )
+
+  registerDocumentTools(server, link)
 
   server.registerTool(
     'get_evaluation',

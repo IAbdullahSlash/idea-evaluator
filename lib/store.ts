@@ -37,6 +37,8 @@ export interface StoredEvaluation {
   stageData: Record<string, unknown>
   /** Raw market search results, so a Summary can only cite real sources. Not shown. */
   research?: unknown
+  /** SRS parts saved so far over MCP, until all three are in. Not shown. */
+  srsDraft?: unknown
 }
 
 /** An unguessable 12-character ID: anyone with the link can view, nobody can find one by guessing. */

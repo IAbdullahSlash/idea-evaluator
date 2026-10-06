@@ -2250,7 +2250,11 @@ export default function AnalysisPage() {
                   Wireframes: {wireframes.screens.map((sc) => sc.name).join(", ")}
                 </p>
               ) : (
-                <p className="text-meta text-pencil">Draw the wireframes next to add the key screens, sketched from these stories.</p>
+                <p className="text-meta text-pencil">
+                  {viewing
+                    ? "Wireframes of the key screens are drawn in the AI chat, after the story map."
+                    : "Draw the wireframes next to add the key screens, sketched from these stories."}
+                </p>
               )}
             </div>
           ) : (
