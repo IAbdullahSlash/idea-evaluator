@@ -140,7 +140,7 @@ export function registerDocumentTools(server: McpServer, link: (id: string) => s
       `${reply} The SRS is complete: ${s.features.length} features, ${requirements.length} functional and ${nfrs} non-functional requirements, ${s.quality.entities.length} data entities.` +
         (storyIds.length
           ? uncovered.length
-            ? `\nTraceability: ${uncovered.join(', ')} have no requirement. Add requirements for them and call save_srs_features again with all the features.`
+            ? `\nTraceability: ${uncovered.join(', ')} ${uncovered.length === 1 ? 'has' : 'have'} no requirement. Add requirements for ${uncovered.length === 1 ? 'it' : 'them'} and call save_srs_features again with all the features.`
             : `\nTraceability: every one of the ${storyIds.length} user stories is covered by at least one requirement.`
           : '\nThere is no story map, so requirements can’t be traced to stories.') +
         `\nLink: ${link(evaluationId)}\n\n${SRS_WRITEUP}`
