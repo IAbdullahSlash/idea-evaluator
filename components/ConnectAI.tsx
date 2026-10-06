@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
  * saved here, with a link to share.
  */
 
-const PRODUCTION_ORIGIN = "https://idea-evaluator-nine.vercel.app"
+const PRODUCTION_ORIGIN = "https://idea-evaluator-slash.vercel.app"
 
 const apps = [
   {

@@ -6,7 +6,7 @@ import { checkMcpRequest } from "@/lib/rate-limit"
 /**
  * The Idea Evaluator's MCP server, for ChatGPT, Claude, Gemini, and other AI
  * clients that support remote MCP servers (custom connectors). Users add this
- * route's URL, e.g. https://idea-evaluator-nine.vercel.app/api/mcp, and their
+ * route's URL, e.g. https://idea-evaluator-slash.vercel.app/api/mcp, and their
  * own AI evaluates ideas with these tools. No AI runs on this server.
  */
 

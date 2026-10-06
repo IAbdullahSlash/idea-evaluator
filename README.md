@@ -21,7 +21,7 @@ The evaluation runs in four stages. Each one opens only when you choose to conti
 The Idea Evaluator is also an MCP server, so people can evaluate ideas inside ChatGPT, Claude, Gemini, or any app that supports MCP connectors, by adding this address as a custom connector:
 
 ```
-https://idea-evaluator-nine.vercel.app/api/mcp
+https://idea-evaluator-slash.vercel.app/api/mcp
 ```
 
 Their own AI does the thinking; the server supplies the method, live research, and the checks, and runs no AI itself. The tools walk the AI through the same four stages, and each reply carries the next stage's guidance and how to write it up in the chat:
