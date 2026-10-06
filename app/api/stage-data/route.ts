@@ -1,6 +1,6 @@
 import { failureMessage, generateChecked } from "@/lib/llm-checked"
-import { planSchema, TIMELINE_FIT, type Plan } from "@/lib/schemas/plan"
-import { availableWeeks, formatWeeks, totalWeeks } from "@/lib/plan-math"
+import { planSchema, TIMELINE_FIT } from "@/lib/schemas/plan"
+import { checkTimeline } from "@/lib/evaluation/plan"
 import { evaluationContext } from "@/lib/evaluation-context"
 import { type NextRequest, NextResponse } from "next/server"
 
@@ -69,22 +69,4 @@ async function makePlan(body: any) {
   const result = await generateChecked(planPrompt(body), planSchema, { label: "plan", fresh: Boolean(body.fresh) })
   if (!result.ok) return NextResponse.json({ error: failureMessage(result, PLAN_FAILED) }, { status: result.busy ? 503 : 502 })
   return NextResponse.json(checkTimeline(result.data, body.timeline))
-}
-
-/**
- * The model's "fits" is checked against the phases' own durations: a plan
- * whose phases add up to more than the time the builder has doesn't fit.
- */
-function checkTimeline(plan: Plan, timeline: unknown): Plan {
-  const needed = totalWeeks(plan.projectMilestones.map((m) => m.duration))
-  const available = availableWeeks(typeof timeline === "string" ? timeline : undefined)
-  if (needed === null || available === null || needed <= available) return plan
-  console.warn(`[plan] Phases need ${needed.toFixed(1)} weeks; the builder has ${available.toFixed(1)}`)
-  return {
-    ...plan,
-    timelineFit: {
-      verdict: "too much",
-      note: `The phases add up to ${formatWeeks(needed)}, more than the ${timeline} you have. Cut scope or allow more time.`,
-    },
-  }
 }

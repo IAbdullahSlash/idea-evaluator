@@ -3,7 +3,8 @@ import { validateIdea } from '@/lib/validation'
 import { missingContext } from '@/lib/schemas/context'
 import { DEFAULT_BUDGET_MS, NoModelAvailableError, forget, generateJsonWithMeta } from '@/lib/llm'
 import { AI_BUSY, AI_SLOW } from '@/lib/llm-checked'
-import { overallScore, snapshotSchema } from '@/lib/schemas/snapshot'
+import { snapshotSchema } from '@/lib/schemas/snapshot'
+import { cleanQuestions, finishSnapshot, finishSummary } from '@/lib/evaluation/finish'
 
 // Intent validation is shared via lib/validation.ts (see validateIdea).
 
@@ -189,18 +190,6 @@ function clarificationBlock(clarifications: Clarification[] | null): string {
   return `\nCLARIFICATIONS FROM THE DEVELOPER (answers to earlier questions):\n${lines.join('\n')}\n`
 }
 
-function cleanQuestions(raw: unknown, max: number): { question: string; why: string }[] {
-  if (!Array.isArray(raw)) return []
-  return raw
-    .filter((q) => q && typeof q.question === 'string' && q.question.trim())
-    .slice(0, max)
-    .map((q) => ({ question: q.question.trim(), why: typeof q.why === 'string' ? q.why.trim() : '' }))
-}
-
-function cleanPoints(raw: unknown, max = 5): string[] {
-  if (!Array.isArray(raw)) return []
-  return raw.filter((p): p is string => typeof p === 'string' && p.trim().length > 0).slice(0, max).map((p) => p.trim())
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -314,14 +303,7 @@ async function markSnapshot(prompt: string, clarifications: Clarification[] | nu
       continue
     }
 
-    const snapshot = parsed.data
-    return NextResponse.json({
-      ...snapshot,
-      feasibilityScore: overallScore(snapshot.rubric),
-      successProbability: Math.round(Math.min(95, Math.max(5, snapshot.successProbability))),
-      honestRealityCheck: snapshot.honestAiFeedback,
-      selfQuestions: cleanQuestions(snapshot.selfQuestions, 5),
-    })
+    return NextResponse.json(finishSnapshot(parsed.data))
   }
   return NextResponse.json({ error: AI_FAILED }, { status: 502 })
 }
@@ -335,68 +317,5 @@ async function summarise(prompt: string) {
     return aiError(error)
   }
 
-  const score = Number(analysis?.feasibilityScore)
-  return NextResponse.json({
-    ...analysis,
-    feasibilityScore: Number.isFinite(score) ? Math.round(Math.min(10, Math.max(1, score))) : undefined,
-    potentialChallenges: analysis.potentialChallenges || {},
-    requirementsScope: analysis.requirementsScope || { mustHaveFeatures: [], niceToHaveFeatures: [], constraints: [] },
-    techStack: analysis.techStack || { frontend: [], backend: [], database: [], tools: [] },
-    recommendations: analysis.recommendations || [],
-    pros: cleanPoints(analysis.pros),
-    cons: cleanPoints(analysis.cons),
-    scoreChange: typeof analysis.scoreChange === 'string' ? analysis.scoreChange.trim() : '',
-    riskSeverity: analysis.riskSeverity || {},
-    quickWins: cleanQuickWins(analysis.quickWins),
-    existingSolutions: await checkSolutionLinks(analysis.existingSolutions),
-  })
-}
-
-function cleanQuickWins(raw: unknown) {
-  if (!Array.isArray(raw)) return []
-  return raw
-    .filter((w) => w && typeof w.title === 'string' && w.title.trim())
-    .slice(0, 3)
-    .map((w) => ({
-      title: w.title.trim(),
-      description: typeof w.description === 'string' ? w.description.trim() : '',
-      timeEstimate: typeof w.timeEstimate === 'string' ? w.timeEstimate.trim() : '',
-    }))
-}
-
-/**
- * Existing solutions come from the model's knowledge, not a live search, so
- * every link is checked: one that doesn't open is dropped (the name stays).
- */
-async function checkSolutionLinks(raw: unknown) {
-  if (!Array.isArray(raw)) return []
-  const solutions = raw
-    .filter((s) => s && typeof s.name === 'string' && s.name.trim())
-    .slice(0, 4)
-    .map((s) => ({
-      name: s.name.trim(),
-      url: typeof s.url === 'string' ? s.url.trim() : '',
-      description: typeof s.description === 'string' ? s.description.trim() : '',
-      difference: typeof s.difference === 'string' ? s.difference.trim() : '',
-    }))
-
-  return Promise.all(
-    solutions.map(async (s) => ({ ...s, url: (await linkOpens(s.url)) ? s.url : '' }))
-  )
-}
-
-async function linkOpens(url: string): Promise<boolean> {
-  if (!/^https?:\/\//i.test(url)) return false
-  try {
-    const response = await fetch(url, {
-      method: 'GET',
-      redirect: 'follow',
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; IdeaEvaluator/0.1)' },
-      signal: AbortSignal.timeout(6000),
-    })
-    // Some sites block bots with 403 but do exist; treat only "not found" style answers as dead.
-    return response.status < 400 || response.status === 403
-  } catch {
-    return false
-  }
+  return NextResponse.json(await finishSummary(analysis))
 }

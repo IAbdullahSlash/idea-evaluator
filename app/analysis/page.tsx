@@ -13,7 +13,8 @@ import { downloadText, fileSlug, hireLinks, jiraCsv, openHtml } from "@/lib/hand
 import { numberRequirements, srsFeaturesSchema, srsOverviewSchema, srsQualitySchema, srsSchema, tidySrs, type Srs } from "@/lib/schemas/srs"
 import { briefSchema, numberStories, type Brief } from "@/lib/schemas/brief"
 import { wireframesSchema, type Wireframes } from "@/lib/schemas/wireframes"
-import { planSchema, type Plan } from "@/lib/schemas/plan"
+import { planSchema } from "@/lib/schemas/plan"
+import { splitPlan } from "@/lib/evaluation/plan"
 import { CONTEXT_QUESTIONS, missingContext } from "@/lib/schemas/context"
 import { availableWeeks, formatMoney, formatWeeks, sumCosts, totalWeeks } from "@/lib/plan-math"
 import { cn } from "@/lib/utils"
@@ -286,26 +287,39 @@ const sameFeature = (a: string, b: string) => {
   return Boolean(x && y) && (x === y || x.includes(y) || y.includes(x))
 }
 
+/**
+ * Saved stage data, made safe to show: a plan or document saved by an older
+ * version (or missing fields) is dropped so it can be made again. Used for data
+ * from the browser's storage and for evaluations loaded from the server.
+ */
+function normalizeStages(input: unknown): Record<string, any> {
+  const stages: Record<string, any> = input && typeof input === "object" ? { ...(input as Record<string, any>) } : {}
+  if (stages.stage3 || stages.stage4) {
+    const plan = planSchema.safeParse({ ...stages.stage3, ...stages.stage4 })
+    if (plan.success) Object.assign(stages, splitPlan(plan.data))
+    else {
+      delete stages.stage3
+      delete stages.stage4
+      delete stages.stage5
+    }
+  }
+  // Older versions saved other hand-off data; keep only documents that still match their schema
+  if (stages.stage5) {
+    const brief = briefSchema.safeParse(stages.stage5.brief)
+    const wireframes = wireframesSchema.safeParse(stages.stage5.wireframes)
+    const srs = srsSchema.safeParse(stages.stage5.srs)
+    stages.stage5 = {
+      ...(brief.success ? { brief: brief.data } : {}),
+      ...(wireframes.success ? { wireframes: wireframes.data } : {}),
+      ...(srs.success ? { srs: srs.data } : {}),
+    }
+  }
+  return stages
+}
+
 // Everything an evaluation keeps in localStorage across refreshes
 const SAVED_KEYS = ["projectAnalysis", "stageData", "evaluationInput", "currentStage", "taskProgress"]
 
-// The plan's two halves: the roadmap (phases, team, process) and the tech plan.
-const splitPlan = (plan: Plan) => ({
-  stage3: {
-    timelineFit: plan.timelineFit,
-    scopeCuts: plan.scopeCuts,
-    projectMilestones: plan.projectMilestones,
-    teamRoles: plan.teamRoles,
-    sdlcMapping: plan.sdlcMapping,
-    qaApproach: plan.qaApproach,
-  },
-  stage4: {
-    techRoadmap: plan.techRoadmap,
-    versionMilestones: plan.versionMilestones,
-    securityConsiderations: plan.securityConsiderations,
-    costEstimates: plan.costEstimates,
-  },
-})
 
 export default function AnalysisPage() {
   // 🚀 STAGED ANALYSIS STATE
@@ -374,6 +388,10 @@ export default function AnalysisPage() {
   const [stageError, setStageError] = useState<string | null>(null)
   // Saved stage data is only written back once it has been read on load
   const [hydrated, setHydrated] = useState(false)
+  // Set when showing a saved evaluation read-only (/analysis?e=<id>) instead of the visitor's own
+  const [viewing, setViewing] = useState<
+    { id: string; status: "loading" } | { id: string; status: "error"; message: string } | { id: string; status: "ready"; source?: string } | null
+  >(null)
   // Follow-up questions, asked when the idea is too vague to mark
   const [clarifyQuestions, setClarifyQuestions] = useState<GuidingQuestion[] | null>(null)
   const [clarifyAnswers, setClarifyAnswers] = useState<string[]>([])
@@ -382,6 +400,37 @@ export default function AnalysisPage() {
 
   // 🚀 LOCAL STORAGE HYDRATION — restore progress after page refresh
   useEffect(() => {
+    // A saved evaluation (/e/<id>, e.g. made in someone's AI through the MCP tools) is shown
+    // read-only from the server; the visitor's own evaluation in this browser is left alone.
+    const viewId = new URLSearchParams(window.location.search).get("e")
+    if (viewId) {
+      setViewing({ id: viewId, status: "loading" })
+      setHydrated(true)
+      fetch(`/api/evaluations/${encodeURIComponent(viewId)}`, { cache: "no-store" })
+        .then(async (response) => {
+          const data = await response.json().catch(() => null)
+          if (!response.ok || !data?.analysis) {
+            setViewing({ id: viewId, status: "error", message: data?.error || "This evaluation couldn't be loaded." })
+            return
+          }
+          const snapshot = validateAnalysisData(data.analysis)
+          const stages = normalizeStages(data.stageData)
+          setAnalysis(snapshot)
+          setStageData({ stage1: snapshot, ...stages })
+          setFormData(prev => ({ ...prev, ...data.formData }))
+          setClarifications(Array.isArray(data.clarifications) ? data.clarifications : null)
+          // Open on the furthest stage that has been saved
+          setCurrentStage(
+            stages.stage5 ? AnalysisStage.HAND_OFF
+              : stages.stage3 && stages.stage4 ? AnalysisStage.PLAN
+                : stages.stage2 ? AnalysisStage.EXECUTIVE_SUMMARY
+                  : AnalysisStage.QUICK_SNAPSHOT
+          )
+          setViewing({ id: viewId, status: "ready", source: data.source })
+        })
+        .catch(() => setViewing({ id: viewId, status: "error", message: "Couldn't reach the server. Check your connection and try again." }))
+      return
+    }
     try {
       // "Evaluate an idea" links add ?new: start on a blank page instead of the last evaluation.
       // The flag is removed at once so a refresh keeps the new evaluation's progress.
@@ -404,30 +453,7 @@ export default function AnalysisPage() {
       const savedStages = localStorage.getItem("stageData")
       if (savedStages) {
         const stages = JSON.parse(savedStages)
-        if (stages && typeof stages === "object") {
-          // A plan saved by an older version may be missing fields; drop it so it is made again
-          if (stages.stage3 || stages.stage4) {
-            const plan = planSchema.safeParse({ ...stages.stage3, ...stages.stage4 })
-            if (plan.success) Object.assign(stages, splitPlan(plan.data))
-            else {
-              delete stages.stage3
-              delete stages.stage4
-              delete stages.stage5
-            }
-          }
-          // Older versions saved other hand-off data; keep only documents that still match their schema
-          if (stages.stage5) {
-            const brief = briefSchema.safeParse(stages.stage5.brief)
-            const wireframes = wireframesSchema.safeParse(stages.stage5.wireframes)
-            const srs = srsSchema.safeParse(stages.stage5.srs)
-            stages.stage5 = {
-              ...(brief.success ? { brief: brief.data } : {}),
-              ...(wireframes.success ? { wireframes: wireframes.data } : {}),
-              ...(srs.success ? { srs: srs.data } : {}),
-            }
-          }
-          setStageData(prev => ({ ...prev, ...stages }))
-        }
+        if (stages && typeof stages === "object") setStageData(prev => ({ ...prev, ...normalizeStages(stages) }))
       }
       const savedInput = localStorage.getItem("evaluationInput")
       if (savedInput) {
@@ -448,16 +474,16 @@ export default function AnalysisPage() {
     setHydrated(true)
   }, [])
 
-  // Keep the later stages across a refresh (the snapshot is saved separately)
+  // Keep the later stages across a refresh (the snapshot is saved separately); never while viewing a saved evaluation
   useEffect(() => {
-    if (!hydrated) return
+    if (!hydrated || viewing) return
     try {
       const { stage1: _snapshot, ...laterStages } = stageData
       localStorage.setItem("stageData", JSON.stringify(laterStages))
     } catch (e) {
       console.warn("Failed to save stage data:", e)
     }
-  }, [stageData, hydrated])
+  }, [stageData, hydrated, viewing])
 
   // Navigation helper - go back one stage without clearing the prompt/idea
   const goToPreviousStage = () => {
@@ -691,7 +717,7 @@ export default function AnalysisPage() {
           break
       }
       setCurrentStage(targetStage)
-      localStorage.setItem("currentStage", targetStage.toString())
+      if (!viewing) localStorage.setItem("currentStage", targetStage.toString())
     } catch (error) {
       console.error(`Failed to load stage ${targetStage}:`, error)
       setStageError(error instanceof Error && error.message ? error.message : "Couldn't load the next page. Please try again.")
@@ -963,7 +989,18 @@ export default function AnalysisPage() {
     )
   }
 
-  const ContinueButton = ({ to, label, hint }: { to: AnalysisStage; label: string; hint?: string }) => (
+  const ContinueButton = ({ to, label, hint }: { to: AnalysisStage; label: string; hint?: string }) =>
+    viewing ? (
+      stageHasData(to) ? (
+        <Button size="lg" onClick={() => selectStage(to)} className="h-11 w-full justify-between px-4 text-[0.9375rem]">
+          {label} <ArrowRight />
+        </Button>
+      ) : (
+        <MarginNote mark={<Query />} title="Not saved yet">
+          This evaluation is being made in an AI chat. Ask your AI to continue to the {stageLabels[to] ?? "next page"}, then refresh.
+        </MarginNote>
+      )
+    ) : (
     <div className="space-y-3">
       <Button
         size="lg"
@@ -1758,13 +1795,13 @@ export default function AnalysisPage() {
                   {hasWeeks !== null ? ` of the ${formData.timeline} you have` : ""}.
                 </p>
               ) : null}
-              <div className="space-y-2">
+              {!viewing ? <div className="space-y-2">
                 <Button variant="outline" onClick={remakePlan} disabled={remakingPlan} className="w-full justify-between">
                   {remakingPlan ? "Writing a new plan…" : "Make a new plan"}
                   {remakingPlan ? <Loader2 className="animate-spin" /> : <RefreshCw />}
                 </Button>
                 {planError && !remakingPlan ? <p role="alert" className="text-meta font-medium text-marker">{planError}</p> : null}
-              </div>
+              </div> : null}
             </div>
           }
         >
@@ -2130,6 +2167,8 @@ export default function AnalysisPage() {
   const WriteButton = ({ doc, label, again = "Write it again" }: { doc: HandOffDoc; label: string; again?: string }) => {
     const written = Boolean(stageData.stage5?.[doc])
     const busy = writing === doc
+    // A viewed evaluation isn't changed from the website; its documents come from the AI chat
+    if (viewing) return null
     return (
       <>
         <Button
@@ -2216,7 +2255,9 @@ export default function AnalysisPage() {
             </div>
           ) : (
             <p className="mt-3 max-w-[60ch] text-sm text-pencil">
-              Write the product vision and the user story map first, so the report includes them.
+              {viewing
+                ? "The product vision, story map, and wireframes are written in the AI chat; until then the report covers the evaluation and the plan."
+                : "Write the product vision and the user story map first, so the report includes them."}
             </p>
           )}
         </SheetRow>
@@ -2243,7 +2284,9 @@ export default function AnalysisPage() {
           </p>
           {!srs && (!brief || !wireframes) ? (
             <p className="mt-3 max-w-[60ch] text-sm text-pencil">
-              Write the vision and story map{wireframes ? "" : " and draw the wireframes"} first, so the requirements can trace to them.
+              {viewing
+                ? "The requirements document is written in the AI chat, once the evaluation has a story map."
+                : `Write the vision and story map${wireframes ? "" : " and draw the wireframes"} first, so the requirements can trace to them.`}
             </p>
           ) : null}
           {srs ? (
@@ -2393,11 +2436,40 @@ export default function AnalysisPage() {
   const selectStage = (n: number) => {
     if (stageHasData(n)) {
       setCurrentStage(n as AnalysisStage)
-      localStorage.setItem("currentStage", n.toString())
-    } else if (n === currentStage + 1) {
+      if (!viewing) localStorage.setItem("currentStage", n.toString())
+    } else if (n === currentStage + 1 && !viewing) {
       proceedToStage(n as AnalysisStage)
     }
   }
+
+  // A saved evaluation: still loading, not found, or a stage that hasn't been saved yet
+  const renderViewingState = () =>
+    viewing?.status === "loading" ? (
+      <Sheet>
+        <SheetRow divider={false} margin={<Loader2 className="size-5 animate-spin text-pencil" />}>
+          <SheetHeading>Opening the evaluation…</SheetHeading>
+        </SheetRow>
+      </Sheet>
+    ) : viewing?.status === "error" ? (
+      <Sheet>
+        <SheetRow divider={false} margin={<MarginNote mark={<Cross />} title="Not found">Links stay valid for 90 days.</MarginNote>}>
+          <SheetHeading>This evaluation couldn&apos;t be opened</SheetHeading>
+          <p className="max-w-[60ch] text-[0.9375rem] text-ink-soft">{viewing.message}</p>
+          <Button asChild variant="outline" className="mt-4">
+            <a href="/analysis?new">Evaluate an idea yourself</a>
+          </Button>
+        </SheetRow>
+      </Sheet>
+    ) : (
+      <Sheet>
+        <SheetRow divider={false} margin={<MarginNote mark={<Query />} title="Not saved yet">Refresh once your AI has saved it.</MarginNote>}>
+          <SheetHeading>{stageLabels[currentStage] ?? "This page"} hasn&apos;t been saved yet</SheetHeading>
+          <p className="max-w-[60ch] text-[0.9375rem] text-ink-soft">
+            This evaluation is being made in an AI chat with the Idea Evaluator connector. Ask the AI to continue to this stage.
+          </p>
+        </SheetRow>
+      </Sheet>
+    )
 
   // A stage whose data is missing (e.g. after a page refresh) gets a clear way back.
   const renderMissingStage = () => (
@@ -2426,7 +2498,7 @@ export default function AnalysisPage() {
   )
 
   // The idea can only be edited while it is on the first page; later pages build on it.
-  const canEditIdea = currentStage === AnalysisStage.QUICK_SNAPSHOT
+  const canEditIdea = currentStage === AnalysisStage.QUICK_SNAPSHOT && !viewing
 
   return (
     <div className="min-h-screen bg-background">
@@ -2474,9 +2546,26 @@ export default function AnalysisPage() {
         </div>
       ) : null}
 
+      {viewing?.status === "ready" ? (
+        <div className="border-b border-rule bg-sheet">
+          <p className="mx-auto flex max-w-[88rem] flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 text-meta text-ink-soft sm:px-6">
+            <span>
+              {viewing.source === "mcp" ? "Made in an AI chat with the Idea Evaluator connector." : "A saved evaluation."} Read-only.
+            </span>
+            <a href="/analysis?new" className="font-medium text-ink underline decoration-rule underline-offset-[3px] hover:decoration-marker">
+              Evaluate your own idea
+            </a>
+          </p>
+        </div>
+      ) : null}
+
       <main className="mx-auto max-w-[88rem] px-4 py-6 sm:px-6 sm:py-10">
         <div key={`${currentStage}-${analyzing}`} className="animate-ink-in">
-          {analyzing ? renderMarking() : (renderStageContent() ?? renderMissingStage())}
+          {viewing && viewing.status !== "ready"
+            ? renderViewingState()
+            : analyzing
+              ? renderMarking()
+              : (renderStageContent() ?? (viewing ? renderViewingState() : renderMissingStage()))}
         </div>
       </main>
     </div>
