@@ -182,7 +182,11 @@ export const srsQualityInput = z.object({
     )
     .min(2)
     .max(4),
-  businessRules: nfr.max(3).describe('Rules the product enforces, e.g. who may do what. Empty if none.'),
+  // A business rule is a statement, not a measurable target, so its measure may be empty
+  businessRules: z
+    .array(z.object({ statement: sentence('A rule the product enforces, e.g. who may do what.'), measure: z.string().describe('Usually "".') }))
+    .max(3)
+    .describe('Empty if none.'),
   entities: z
     .array(
       z.object({
