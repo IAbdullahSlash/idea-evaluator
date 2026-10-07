@@ -14,7 +14,7 @@ The evaluation runs in four stages. Each one opens only when you choose to conti
 1. **Snapshot** — A mark out of 10, worked out from six criteria (a real problem, worth solving, not already done, something new, within reach, someone wants it), each with its own mark and reason. Also a recommendation (Build / Narrow it down / Rethink / Drop), odds of success, an honest reality check, who it is for, and questions to ask yourself. If the idea is too vague to mark, it asks up to three follow-up questions first.
 2. **Summary** — Pros and cons, risks with severity, what people are discussing (Hacker News and Stack Exchange) and recent news coverage (Google News), quick wins, existing solutions, similar projects on GitHub, and an executive summary.
 3. **Plan** — Whether the scope fits your time, phases sized to it, scope cuts, the team, the stack, versions, security, and costs added up.
-4. **Hand-off** — Two documents to download as PDF or Word: Idea as an overall (the idea judged against four questions: the problem and who cares, building and scaling it, maintaining it, and measuring success) and a detailed SRS (IEEE 830 outline, with the product vision, user story map, wireframes, a data model, and traceability to the user stories and screens); the plan as a Jira CSV; and searches for people with the plan's skills.
+4. **Hand-off** — Two documents to download as PDF or Word: Idea as an overall (the idea judged against four questions: the problem and who cares, building and scaling it, maintaining it, and measuring success) and a detailed SRS (IEEE 830 outline, with the product vision, user story map, wireframes, a data model, and traceability to the user stories and screens); the plan sent to Linear as a roadmap (a project per version, phases as milestones, deliverables and user stories as issues); and searches for people with the plan's skills.
 
 ## Use It in Your Own AI (MCP)
 
@@ -54,7 +54,8 @@ Browser (Next.js 14 App Router)
         ├─ POST /api/wireframes   Key screens as low-fidelity wireframes (validated against a schema)
         ├─ POST /api/srs          Detailed requirements document, written in three parts at once (each validated)
         ├─ POST /api/discussions  Hacker News, Stack Exchange, and Google News, filtered and summarised
-        └─ POST /api/github-repos Similar repositories
+        ├─ POST /api/github-repos Similar repositories
+        └─ /api/linear/*          Connect to Linear and send the plan there as a roadmap (GraphQL API, the person's own token)
                 │
                 └─ lib/llm.ts — AI router
                      "quality" tier: gemini-3.5-flash → gemini-3.8-flash → Groq gpt-oss-120b
@@ -121,8 +122,20 @@ Open [http://localhost:3000](http://localhost:3000) and write down your idea.
 | `GITHUB_TOKEN` | No | Raises the GitHub search rate limit; search works without it |
 | `STACKEXCHANGE_KEY` | No | Raises the Stack Exchange limit from 300 to 10,000 requests a day (free at stackapps.com) |
 | `KV_REST_API_URL`, `KV_REST_API_TOKEN` | For MCP | Upstash Redis for saved evaluations and rate limits; added by Vercel's Upstash integration |
+| `LINEAR_CLIENT_ID`, `LINEAR_CLIENT_SECRET` | For Linear | The site's Linear OAuth app, for sending plans to Linear (see below) |
 
 A system-wide environment variable with the same name takes priority over `.env.local`.
+
+### Sending plans to Linear
+
+The Hand-off page builds the plan in the person's own Linear workspace. To turn it on, create an OAuth application in Linear (**Settings → API → OAuth applications → New**) with these callback URLs, one per address the site runs on:
+
+```
+https://idea-evaluator-slash.vercel.app/api/linear/callback
+http://localhost:3000/api/linear/callback
+```
+
+Then set its client ID and secret as `LINEAR_CLIENT_ID` and `LINEAR_CLIENT_SECRET` in Vercel and in `.env.local`. Without them the page says sending to Linear isn't set up. People sign in with Linear (OAuth with PKCE); their token is kept in an httpOnly cookie for its 24-hour lifetime and never stored on the server.
 
 In development, `GET /api/llm-status` shows which model/key pairs are available or cooling down (never the keys themselves).
 
@@ -143,6 +156,7 @@ app/
     ├── srs/                 # Requirements document
     ├── discussions/         # Discussions and news
     ├── github-repos/        # Similar repositories
+    ├── linear/              # Connect to Linear (OAuth), list teams, send the plan as a roadmap
     ├── google-search/       # Web search (needs Google Custom Search keys; not used by the UI yet)
     ├── mcp/                 # MCP server for people's own AI
     ├── evaluations/[id]/    # A saved evaluation, for the read-only view
@@ -164,7 +178,8 @@ lib/
 ├── documents/               # Document template (fixed outline), the Idea-as-an-overall and SRS layouts, the wireframe drawing, and the PDF and Word exporters
 ├── evaluation-context.ts    # What earlier pages learned, as prompt text for the Plan and SRS
 ├── plan-math.ts             # Phase durations and costs added up
-├── handoff.ts               # Jira CSV, hiring searches, downloads
+├── handoff.ts               # Hiring searches, downloads
+├── linear/                  # Sending the plan to Linear: OAuth, the roadmap's structure, the GraphQL calls
 ├── hackernews.ts            # Hacker News search and comments
 ├── stackexchange.ts         # Stack Exchange questions and answers
 ├── news.ts                  # Google News search

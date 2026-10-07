@@ -1,49 +1,11 @@
 /**
- * The Hand-off page's exports, built from the plan in the browser:
- * the plan as Jira issues, and searches for people with the plan's skills.
+ * The Hand-off page's helpers, run in the browser: searches for people with
+ * the plan's skills, and saving files.
  */
-
-interface Phase {
-  phase: string
-  duration: string
-  deliverables: string[]
-}
 
 interface Role {
   role: string
   skills: string[]
-}
-
-// RFC 4180: quote every field and double any quotes inside it
-const csvField = (value: string) => `"${value.replace(/"/g, '""')}"`
-
-/**
- * The plan as a CSV for Jira's importer: each phase is an epic and each of its
- * deliverables a task under it, linked through the Issue ID and Parent ID
- * columns. Two Labels columns (Jira takes one label per column) carry the
- * project and the phase, so the issues are easy to filter.
- */
-export function jiraCsv(phases: Phase[], projectTitle: string): string {
-  const label = projectTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'project'
-  const rows: string[][] = [['Issue ID', 'Parent ID', 'Issue Type', 'Summary', 'Description', 'Labels', 'Labels']]
-  let id = 1
-  phases.forEach((phase, i) => {
-    const epicId = id++
-    const phaseLabel = `phase-${i + 1}`
-    rows.push([
-      String(epicId),
-      '',
-      'Epic',
-      `${i + 1}. ${phase.phase}`,
-      `Estimated time: ${phase.duration}`,
-      label,
-      phaseLabel,
-    ])
-    for (const deliverable of phase.deliverables) {
-      rows.push([String(id++), String(epicId), 'Task', deliverable, `Part of phase ${i + 1}: ${phase.phase}`, label, phaseLabel])
-    }
-  })
-  return rows.map((row) => row.map(csvField).join(',')).join('\r\n')
 }
 
 export interface HireLink {
@@ -79,12 +41,6 @@ export function downloadBlob(filename: string, blob: Blob): void {
   a.click()
   a.remove()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
-}
-
-/** Save text as a file through the browser's download. */
-export function downloadText(filename: string, text: string, type: string): void {
-  // No byte-order mark: Jira's importer would read it as part of the first column's name
-  downloadBlob(filename, new Blob([text], { type }))
 }
 
 /** A safe file name from the project title. */

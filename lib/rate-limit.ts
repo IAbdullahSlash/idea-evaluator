@@ -59,6 +59,26 @@ async function exceeded(limit: Limit, ip: string): Promise<number | null> {
   }
 }
 
+let linearLimit: Limit | null = null
+
+/**
+ * Sending plans to Linear, per IP: each send makes dozens of calls to Linear
+ * with the person's own token, so a few an hour is plenty. Returns how many
+ * seconds to wait, or null to go ahead.
+ */
+export async function checkLinearPush(request: Request): Promise<number | null> {
+  try {
+    linearLimit ??= {
+      limiter: new Ratelimit({ redis: redis(), prefix: 'ratelimit:linear:push', limiter: Ratelimit.slidingWindow(6, '1 h'), analytics: false }),
+      message: '',
+    }
+    return await exceeded(linearLimit, clientIp(request))
+  } catch {
+    // Without storage there is no limit, as with the MCP endpoint
+    return null
+  }
+}
+
 /**
  * Check an MCP request before it is handled. Returns a reply to send instead
  * (too large, or over a limit), or null to go ahead.

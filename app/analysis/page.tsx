@@ -11,7 +11,8 @@ import { buildOverall } from "@/lib/documents/overall"
 import { buildSrsDocument } from "@/lib/documents/srs"
 import type { DocumentSpec } from "@/lib/documents/template"
 import type { ExportFormat } from "@/lib/documents/export"
-import { downloadText, fileSlug, hireLinks, jiraCsv } from "@/lib/handoff"
+import { fileSlug, hireLinks } from "@/lib/handoff"
+import type { LinearPlanInput } from "@/lib/linear/plan"
 import { numberRequirements, srsFeaturesSchema, srsOverviewSchema, srsQualitySchema, srsSchema, tidySrs, type Srs } from "@/lib/schemas/srs"
 import { briefSchema, numberStories, type Brief } from "@/lib/schemas/brief"
 import { wireframesSchema, type Wireframes } from "@/lib/schemas/wireframes"
@@ -246,6 +247,22 @@ const HAND_OFF_DOCS = {
   srs: { url: "/api/srs", name: "requirements document" },
 } as const
 
+// The Linear connection, as /api/linear/workspace reports it
+type LinearState =
+  | { status: "loading" }
+  | { status: "unavailable" }
+  | { status: "disconnected" }
+  | { status: "connected"; workspace: string; teams: { id: string; name: string; key: string }[] }
+type LinearResult = { initiative?: { name: string; url: string }; projects: { name: string; url: string }[]; issues: number }
+
+// What ?linear= says after returning from Linear's consent screen
+const LINEAR_RETURN: Record<string, { tone: "error" | "note"; text: string }> = {
+  connected: { tone: "note", text: "Linear is connected. Choose a team and send the plan." },
+  denied: { tone: "note", text: "Linear wasn’t connected: access was declined." },
+  error: { tone: "error", text: "Linear couldn’t be connected this time. Please try again." },
+  // "unavailable" needs no message: the row itself says Linear isn't set up
+}
+
 // The server's AI routes stop at 60 s (Vercel's limit); a little more allows for the network
 const REQUEST_TIMEOUT_MS = 70_000
 
@@ -387,6 +404,12 @@ export default function AnalysisPage() {
   // The document file being made for download ("overall-pdf", "srs-docx", …), and why the last one failed
   const [exporting, setExporting] = useState<string | null>(null)
   const [exportError, setExportError] = useState<{ doc: string; message: string } | null>(null)
+  // Sending the plan to Linear: the connection, the chosen team, and the last send's outcome
+  const [linear, setLinear] = useState<LinearState>({ status: "loading" })
+  const [linearTeam, setLinearTeam] = useState("")
+  const [sendingLinear, setSendingLinear] = useState(false)
+  const [linearResult, setLinearResult] = useState<LinearResult | null>(null)
+  const [linearMessage, setLinearMessage] = useState<{ tone: "error" | "note"; text: string } | null>(null)
   // Remaking the plan from the Plan page, and why it failed
   const [remakingPlan, setRemakingPlan] = useState(false)
   const [planError, setPlanError] = useState<string | null>(null)
@@ -826,6 +849,97 @@ export default function AnalysisPage() {
     } finally {
       setRemakingPlan(false)
     }
+  }
+
+  // Back from Linear's consent screen: say how it went, and drop ?linear= so a refresh doesn't repeat it
+  useEffect(() => {
+    const url = new URL(window.location.href)
+    const outcome = url.searchParams.get("linear")
+    if (!outcome) return
+    setLinearMessage(LINEAR_RETURN[outcome] ?? null)
+    url.searchParams.delete("linear")
+    window.history.replaceState(null, "", url.pathname + url.search)
+  }, [])
+
+  // Whether Linear can be used, and the person's teams once they're connected
+  const loadLinear = async () => {
+    try {
+      const response = await fetch("/api/linear/workspace", { cache: "no-store" })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data?.error)
+      if (!data.available) setLinear({ status: "unavailable" })
+      else if (!data.connected) setLinear({ status: "disconnected" })
+      else {
+        setLinear({ status: "connected", workspace: data.workspace, teams: data.teams })
+        setLinearTeam((t) => (data.teams.some((x: { id: string }) => x.id === t) ? t : data.teams[0]?.id ?? ""))
+      }
+    } catch (error) {
+      setLinear({ status: "disconnected" })
+      setLinearMessage({ tone: "error", text: error instanceof Error && error.message ? error.message : "Couldn’t reach Linear." })
+    }
+  }
+  useEffect(() => {
+    if (currentStage === AnalysisStage.HAND_OFF && linear.status === "loading") loadLinear()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStage])
+
+  // The plan, versions, and story map, as the Linear route reads them
+  const linearPlan = (): LinearPlanInput | null => {
+    const s3 = stageData.stage3
+    const s4 = stageData.stage4
+    if (!s3?.projectMilestones.length) return null
+    const brief = stageData.stage5?.brief
+    const clip = (t: unknown, max: number) => String(t ?? "").trim().slice(0, max)
+    const now = new Date()
+    return {
+      title: clip(projectTitle(), 160),
+      idea: clip(formData.idea, 2000),
+      verdict: stageData.stage5?.overall ? clip(stageData.stage5.overall.verdict, 3000) : undefined,
+      link: viewing ? `${window.location.origin}/e/${viewing.id}` : undefined,
+      // The builder's today, in their own time zone
+      startDate: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`,
+      phases: s3.projectMilestones.slice(0, 10).map((m) => ({
+        phase: clip(m.phase, 160),
+        duration: clip(m.duration, 60),
+        deliverables: m.deliverables.slice(0, 10).map((d) => clip(d, 300)),
+      })),
+      versions: (s4?.versionMilestones ?? []).slice(0, 5).map((v) => ({
+        version: clip(v.version, 60),
+        timeline: clip(v.timeline, 80),
+        description: clip(v.description, 600),
+        features: v.features.slice(0, 15).map((f) => clip(f, 200)),
+      })),
+      stories: (brief ? numberStories(brief) : []).slice(0, 40).map((s) => ({ id: s.id, title: clip(s.title, 400), release: clip(s.release, 60), activity: clip(s.activity, 160) })),
+    }
+  }
+
+  const sendToLinear = async () => {
+    const plan = linearPlan()
+    if (!plan || !linearTeam) return
+    setSendingLinear(true)
+    setLinearMessage(null)
+    setLinearResult(null)
+    try {
+      const response = await fetch("/api/linear/push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ teamId: linearTeam, plan }),
+      })
+      const data = await response.json().catch(() => null)
+      if (response.status === 401) setLinear({ status: "disconnected" })
+      if (!response.ok) throw new Error(data?.error || "The plan couldn’t be sent to Linear. Please try again.")
+      setLinearResult(data)
+    } catch (error) {
+      setLinearMessage({ tone: "error", text: error instanceof Error ? error.message : "The plan couldn’t be sent to Linear." })
+    } finally {
+      setSendingLinear(false)
+    }
+  }
+
+  const disconnectLinear = async () => {
+    await fetch("/api/linear/disconnect", { method: "POST" }).catch(() => undefined)
+    setLinear({ status: "disconnected" })
+    setLinearResult(null)
   }
 
   // 🔥 STAGE 4: Load Hand-off Data
@@ -2241,6 +2355,7 @@ export default function AnalysisPage() {
     const stories = brief ? numberStories(brief) : []
     const phases = stageData.stage3?.projectMilestones ?? []
     const taskCount = phases.reduce((n, p) => n + p.deliverables.length, 0)
+    const versions = stageData.stage4?.versionMilestones ?? []
     const hiring = hireLinks(stageData.stage3?.teamRoles ?? [])
     const requirements = srs ? numberRequirements(srs) : []
     const nfrCount = srs ? [srs.quality.performance, srs.quality.safety, srs.quality.security, srs.quality.quality, srs.quality.businessRules].reduce((n, l) => n + l.length, 0) : 0
@@ -2392,23 +2507,70 @@ export default function AnalysisPage() {
         {phases.length > 0 ? (
           <SheetRow
             margin={
-              <Button
-                size="lg"
-                variant="outline"
-                className="h-11 w-full justify-between px-4"
-                onClick={() => downloadText(`${fileSlug(projectTitle())}-jira.csv`, jiraCsv(phases, projectTitle()), "text/csv")}
-              >
-                Download CSV <Download />
-              </Button>
+              <div className="space-y-2">
+                {linear.status === "connected" ? (
+                  <>
+                    <p className="text-meta text-pencil">Connected to <span className="font-medium text-ink-soft">{linear.workspace}</span></p>
+                    {linear.teams.length > 1 ? (
+                      <div className="relative">
+                        <select aria-label="Linear team" className={selectClass} value={linearTeam} onChange={(e) => setLinearTeam(e.target.value)}>
+                          {linear.teams.map((t) => (
+                            <option key={t.id} value={t.id} className="text-ink">{t.name} ({t.key})</option>
+                          ))}
+                        </select>
+                        <SelectChevron />
+                      </div>
+                    ) : null}
+                    <Button size="lg" className="h-11 w-full justify-between px-4" disabled={sendingLinear || !linearTeam} onClick={sendToLinear}>
+                      {sendingLinear ? "Building the roadmap…" : "Send to Linear"}
+                      {sendingLinear ? <Loader2 className="animate-spin" /> : <ArrowUpRight />}
+                    </Button>
+                    {sendingLinear ? <p className="text-meta text-pencil">This takes about half a minute.</p> : null}
+                    <Button variant="ghost" className="w-full justify-between text-ink-soft" disabled={sendingLinear} onClick={disconnectLinear}>
+                      Disconnect Linear
+                    </Button>
+                  </>
+                ) : linear.status === "disconnected" ? (
+                  <Button asChild size="lg" className="h-11 w-full justify-between px-4">
+                    <a href={`/api/linear/connect?returnTo=${encodeURIComponent(viewing ? `/analysis?e=${viewing.id}` : "/analysis")}`}>
+                      Connect Linear <ArrowRight />
+                    </a>
+                  </Button>
+                ) : linear.status === "loading" ? (
+                  <p className="text-meta text-pencil">Checking Linear…</p>
+                ) : (
+                  <MarginNote title="Not set up yet">Sending to Linear needs the site&apos;s Linear app, which isn&apos;t configured here.</MarginNote>
+                )}
+                {linearMessage ? (
+                  <p role={linearMessage.tone === "error" ? "alert" : "status"} className={cn("text-meta", linearMessage.tone === "error" ? "font-medium text-marker" : "text-pencil")}>
+                    {linearMessage.text}
+                  </p>
+                ) : null}
+              </div>
             }
           >
-            <SheetHeading>The plan as tasks</SheetHeading>
+            <SheetHeading>Send the plan to Linear</SheetHeading>
             <p className="max-w-[60ch] text-[0.9375rem] leading-relaxed text-ink-soft">
-              {plural(phases.length, "epic")} and {plural(taskCount, "task")}: each phase of the plan becomes an epic and each
-              of its deliverables a task under it. Import it with Jira&apos;s CSV importer and map the <span className="font-medium text-ink">Issue ID</span> and{" "}
-              <span className="font-medium text-ink">Parent ID</span> columns so the tasks land under their epics. Trello,
-              Linear, and GitHub Projects can import the same file.
+              Builds the plan in your Linear workspace as a roadmap you keep working in: an initiative for the product, a
+              project for each version on the timeline, each phase as a milestone with its deliverables as issues, and the
+              user stories as issues in the release that delivers them. Dates start from today.
             </p>
+            <p className="mt-3 text-meta text-pencil tabular">
+              {plural(Math.max(1, versions.length), "project")} · {plural(phases.length, "milestone")} · {plural(taskCount + stories.length, "issue")}
+              {stories.length ? "" : " · write the story map to add the user stories"}
+            </p>
+            {linearResult ? (
+              <div role="status" className="mt-4 space-y-1.5">
+                <p className="font-medium text-ink">
+                  <Tick /> Sent: {plural(linearResult.projects.length, "project")} and {plural(linearResult.issues, "issue")} created.
+                </p>
+                <p className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                  {linearResult.initiative ? <LinkTitle href={linearResult.initiative.url}>Open the roadmap</LinkTitle> : null}
+                  {linearResult.projects.map((p) => <LinkTitle key={p.url} href={p.url}>{p.name}</LinkTitle>)}
+                </p>
+                <p className="text-meta text-pencil">Sending again creates a new copy.</p>
+              </div>
+            ) : null}
           </SheetRow>
         ) : null}
 
