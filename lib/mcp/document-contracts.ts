@@ -15,34 +15,46 @@ const sentence = (what: string) => z.string().min(1).describe(what)
 
 const answer = z.enum(['Yes', 'Partly', 'No']).describe('The honest short answer to the question. Don’t soften a weak idea.')
 const summary = sentence('2-3 sentences answering the question directly.')
+// The text fields are full paragraphs, so the document reads as a real assessment
+const paragraph = (what: string) => sentence(`A paragraph of 4-6 sentences: ${what} Specific, explained, with numbers from the plan and research where they exist.`)
+const backing = {
+  evidence: z.array(z.string()).min(3).max(4).describe('Facts from the evaluation, research, or plan that support this answer, each with its number or source.'),
+  assumptions: z
+    .array(z.object({ assumption: sentence('Something this answer takes for granted that isn’t proven yet.'), check: sentence('A cheap, quick way to test it before building much.') }))
+    .min(2)
+    .max(3),
+  improve: z.array(z.string()).min(2).max(3).describe('Concrete changes that would move this answer towards Yes, or keep it a Yes.'),
+}
 
 export const overallInput = z.object({
   evaluationId: id,
-  verdict: sentence('One paragraph: the idea as a whole, whether it is worth building, and the main reason.'),
+  verdict: sentence('Two paragraphs separated by a blank line: first the idea as a whole and whether it is worth building, then the main reasons and the condition it depends on most.'),
   problem: z
     .object({
       answer,
       summary,
-      painPoint: sentence('The specific pain, stated explicitly: what goes wrong today, for whom, and what it costs them.'),
-      whoCares: sentence('Who has this problem, who would pay or switch, and the evidence for it.'),
-      urgency: sentence('How urgent, frequent, or expensive the problem is, and the workarounds people use today.'),
-      differentiation: sentence('How it differs from the alternatives, whether that is a 10x improvement or a lasting advantage, and what happens to adoption if not.'),
+      painPoint: paragraph('the specific pain, stated explicitly: what goes wrong today, for whom, how often, and what it costs them.'),
+      whoCares: paragraph('who has this problem, who would pay or switch, how many of them there are, and the evidence for it.'),
+      urgency: paragraph('how urgent, frequent, or expensive the problem is, and the workarounds people use today and what those cost.'),
+      differentiation: paragraph('how it differs from each main alternative, whether that is a 10x improvement or a lasting advantage, and what happens to adoption if not.'),
+      ...backing,
     })
     .describe('Question 1: What specific problem does this solve, and who actually cares?'),
   build: z
     .object({
       answer,
       summary,
-      architecture: sentence('Whether the planned architecture gives the availability, data security, and maintainability this product needs, and where it is weakest.'),
-      resources: sentence('Whether the builder has or can get the skills, framework expertise, and environment, and whether the timeline has margin.'),
-      gaps: z.array(z.string()).min(2).max(4).describe('Specific gaps to close before or during the build, and how.'),
+      architecture: paragraph('whether the planned architecture gives the availability, data security, and maintainability this product needs, where it is weakest, and what load it handles before needing changes.'),
+      resources: paragraph('whether the builder has or can get the skills, framework expertise, and environment, which parts will take longest, and whether the timeline has margin.'),
+      gaps: z.array(z.string()).min(3).max(4).describe('Specific gaps to close before or during the build, and how.'),
+      ...backing,
     })
     .describe('Question 2: Can it realistically be built and scaled?'),
   sustain: z
     .object({
       answer,
       summary,
-      operations: sentence('The infrastructure to run, how performance holds up as usage grows, where technical debt will build up, and the ongoing cost and effort.'),
+      operations: paragraph('the infrastructure to run, how performance holds up as usage grows, where technical debt will build up, and the ongoing cost and hours each month.'),
       dependencies: z
         .array(
           z.object({
@@ -52,9 +64,10 @@ export const overallInput = z.object({
             exit: sentence('The way out: an alternative, or how to keep it replaceable.'),
           })
         )
-        .min(2)
+        .min(3)
         .max(5)
         .describe('The dependencies the plan’s stack and costs actually rely on.'),
+      ...backing,
     })
     .describe('Question 3: Can it be sustainably maintained and lived with?'),
   success: z
@@ -65,10 +78,16 @@ export const overallInput = z.object({
         .array(z.object({ metric: sentence('A hard measure of return.'), target: sentence('The number that means success, and by when.') }))
         .min(3)
         .max(4),
-      userValue: sentence('What success looks like for the people using it: the workflows they complete, how quickly, and with how little friction.'),
-      warningSigns: z.array(z.string()).min(2).max(3).describe('Measurable signs users are struggling or abandoning it.'),
+      userValue: paragraph('what success looks like for the people using it: the workflows they complete, how quickly, how often, and with how little friction.'),
+      warningSigns: z.array(z.string()).min(2).max(3).describe('Measurable signs users are struggling or abandoning it, each with the threshold that should trigger action.'),
+      ...backing,
     })
     .describe('Question 4: How will success be defined and measured?'),
+  nextSteps: z
+    .array(z.object({ step: sentence('A concrete action.'), why: sentence('What it proves or unblocks.'), effort: sentence('e.g. "2 days".') }))
+    .min(4)
+    .max(5)
+    .describe('What to do next, in order; the first doable this week.'),
 })
 
 // ── product brief: vision and user story map ───────────────────────────
@@ -175,17 +194,17 @@ const nfr = z.array(
 
 export const srsOverviewInput = z.object({
   evaluationId: id,
-  purpose: sentence('2-3 sentences: what this document specifies and who it is for.'),
+  purpose: sentence('3-5 sentences: what this document specifies, which releases it covers, who it is for, and how they should use it.'),
   inScope: z.array(z.string()).min(3).describe('What the product does, one capability per item.'),
   outOfScope: z.array(z.string()).describe('What it deliberately does not do, including what the plan leaves out.'),
   definitions: z.array(z.object({ term: z.string(), meaning: z.string() })).describe('Only terms a reviewer might not know.'),
-  productPerspective: sentence('2-3 sentences: standalone or part of a larger system; what it replaces or works alongside.'),
+  productPerspective: sentence('4-6 sentences: standalone or part of a larger system; what it replaces or works alongside, the main parts it is built from, and how data flows between them.'),
   productFunctions: z.array(z.string()).min(4).max(8),
   userClasses: z
     .array(z.object({ name: z.string(), description: sentence('Who they are and what they do with it.'), frequency: z.string(), expertise: z.string() }))
     .min(2)
     .max(4),
-  operatingEnvironment: sentence('Platforms, browsers or devices, hosting.'),
+  operatingEnvironment: sentence('2-4 sentences: platforms, browsers or devices and their minimum versions, hosting, and where data is stored.'),
   designConstraints: z.array(z.string()).describe('Stack, budget, regulation, deadline.'),
   userDocumentation: z.array(z.string()),
   assumptions: z.array(z.string()),
@@ -202,7 +221,7 @@ export const srsFeaturesInput = z.object({
     .array(
       z.object({
         name: sentence('A feature, e.g. "Pre-order entry".'),
-        description: sentence('2-3 sentences: what it does and for whom.'),
+        description: sentence('3-5 sentences: what it does, for whom, when they use it, and the rules or edge cases it must handle.'),
         priority: z
           .enum(['Must', 'Should', 'Could'])
           .describe('Must = must-have features; Should = other features the planned versions include; Could = nice-to-haves and anything the plan leaves out.'),
@@ -214,7 +233,7 @@ export const srsFeaturesInput = z.object({
           .array(
             z.object({
               statement: sentence('One testable "The system shall …" statement.'),
-              acceptance: z.array(z.string()).min(1).max(3).describe('Testable conditions.'),
+              acceptance: z.array(z.string()).min(2).max(3).describe('Concrete pass/fail checks with their numbers, e.g. "Given 3 items in the basket, the total updates within 1 second".'),
               stories: z.array(z.string()).describe('Story ids (US-n) it fulfils.'),
               screens: z.array(z.string()).describe('Screen names, exactly as in the wireframes, where it shows up; empty for background work.'),
             })
@@ -254,7 +273,9 @@ export const srsQualityInput = z.object({
         name: sentence('A data entity, e.g. "Pre-order".'),
         description: z.string(),
         fields: z.array(z.object({ name: z.string(), type: z.string().describe('text | number | date | boolean | id | …'), notes: z.string().describe('e.g. "unique", "required"') })),
-        relations: z.array(z.string()).describe('e.g. "A Bakery has many Products".'),
+        relations: z
+          .array(z.string())
+          .describe('Each exactly "<Entity> has many <Entity>", "<Entity> has one <Entity>", or "<Entity> belongs to <Entity>", using the entity names as given, e.g. "Bakery has many Product". They are drawn as the data model diagram.'),
       })
     )
     .min(3)

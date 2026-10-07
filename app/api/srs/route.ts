@@ -75,14 +75,14 @@ function overviewPrompt(context: string): string {
 ${context}
 Write the introduction, overall description, and interfaces as JSON in exactly this shape:
 {
-  "purpose": "2-3 sentences: what this document specifies and who it is for",
+  "purpose": "3-5 sentences: what this document specifies, which releases it covers, who it is for, and how they should use it",
   "inScope": ["what the product does, one capability per item"],
   "outOfScope": ["what it deliberately doesn't do, including what the plan leaves out"],
   "definitions": [ { "term": "string", "meaning": "string" } ],
-  "productPerspective": "2-3 sentences: standalone or part of a larger system, what it replaces or works alongside",
+  "productPerspective": "4-6 sentences: standalone or part of a larger system, what it replaces or works alongside, the main parts it is built from, and how data flows between them",
   "productFunctions": ["a major function, in a few words"],
   "userClasses": [ { "name": "string", "description": "who they are and what they do with it", "frequency": "how often they use it", "expertise": "their technical level" } ],
-  "operatingEnvironment": "platforms, browsers or devices, hosting",
+  "operatingEnvironment": "2-4 sentences: platforms, browsers or devices and their minimum versions, hosting, and where data is stored",
   "designConstraints": ["a constraint on the design: stack, budget, regulation, deadline"],
   "userDocumentation": ["documentation or help delivered with the product"],
   "assumptions": ["something assumed true"],
@@ -107,7 +107,7 @@ Write section 4, the system features, as JSON in exactly this shape:
   "features": [
     {
       "name": "a feature, e.g. 'Member check-in'",
-      "description": "2-3 sentences: what it does and for whom",
+      "description": "3-5 sentences: what it does, for whom, when they use it, and the rules or edge cases it must handle",
       "priority": ${PRIORITIES.map((p) => `"${p}"`).join(" | ")},
       "stimulusResponse": [ { "stimulus": "what the user or system does", "response": "what the system does in reply" } ],
       "requirements": [
@@ -118,7 +118,7 @@ Write section 4, the system features, as JSON in exactly this shape:
 }
 
 Rules:
-- 4 to 8 features covering every user story${stories.length ? "" : " and must-have feature"}, each with 2 to 4 stimulus/response pairs and 2 to 5 requirements. Each requirement has 1 to 3 acceptance criteria.
+- 4 to 8 features covering every user story${stories.length ? "" : " and must-have feature"}, each with 2 to 4 stimulus/response pairs and 2 to 5 requirements. Each requirement has 2 or 3 acceptance criteria, each a concrete pass/fail check with its numbers (e.g. "Given 3 items in the basket, the total updates within 1 second").
 - Priority: Must = the must-have features; Should = other features the planned versions include; Could = nice-to-haves and anything the plan leaves out.
 - stories: ${stories.length ? "the story IDs each requirement fulfils, from the list above. Every story should be covered by at least one requirement." : "leave empty: there is no story map."}
 - screens: ${screens.length ? "the screen names (exactly as listed above) where the requirement shows up; empty for background work." : "leave empty: there are no wireframes."}
@@ -136,7 +136,7 @@ Write sections 5 and 6 and the open questions as JSON in exactly this shape:
   "security": [ { "statement": "…", "measure": "…" } ],
   "quality": [ { "attribute": "Usability | Reliability | Availability | Maintainability | Portability | Accessibility", "statement": "…", "measure": "…" } ],
   "businessRules": [ { "statement": "a rule the product enforces, e.g. who may do what", "measure": "" } ],
-  "entities": [ { "name": "a data entity, e.g. 'Member'", "description": "what it represents", "fields": [ { "name": "field", "type": "text | number | date | boolean | id | …", "notes": "e.g. 'unique', 'required'" } ], "relations": ["e.g. 'A Gym has many Members'"] } ],
+  "entities": [ { "name": "a data entity, e.g. 'Member'", "description": "what it represents", "fields": [ { "name": "field", "type": "text | number | date | boolean | id | …", "notes": "e.g. 'unique', 'required'" } ], "relations": ["exactly '<Entity> has many <Entity>', '<Entity> has one <Entity>', or '<Entity> belongs to <Entity>', using the entity names above, e.g. 'Gym has many Member'"] } ],
   "retention": ["how long data is kept, and how it is deleted"],
   "openQuestions": [ { "question": "something still to decide", "why": "why it matters" } ]
 }

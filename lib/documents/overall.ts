@@ -1,18 +1,21 @@
 import { CRITERIA } from '@/lib/schemas/snapshot'
 import { QUESTIONS, type Answer, type Overall } from '@/lib/schemas/overall'
 import { availableWeeks, formatMoney, formatWeeks, sumCosts, totalWeeks } from '@/lib/plan-math'
-import { arr, bullets, esc, facts, link, para, str, table, texts, type DocSection, type DocumentSpec } from '@/lib/documents/template'
+import { arr, bullets, esc, facts, keep, link, para, str, table, texts, type DocSection, type DocumentSpec } from '@/lib/documents/template'
 
 /**
  * "Idea as an overall", on its fixed outline:
  *
  *   1 The idea as a whole · 2 The problem and who cares · 3 Building and scaling it
- *   4 Maintaining and living with it · 5 Measuring success · Appendix A: sources
+ *   4 Maintaining and living with it · 5 Measuring success · 6 What to do next
+ *   Appendix A: sources
  *
  * The four middle chapters answer the four questions; each opens with its
- * short answer and adds the evaluation's own evidence (alternatives, plan,
- * costs). The saved evaluation may come from an older version, so every
- * field outside the overall answers is read defensively.
+ * short answer, adds the evaluation's own evidence (alternatives, plan,
+ * costs), and ends with the evidence behind the answer, the assumptions to
+ * check, and what would strengthen it. The saved evaluation may come from an
+ * older version, so every field outside the overall answers is read
+ * defensively.
  */
 
 export interface OverallInput {
@@ -24,10 +27,26 @@ export interface OverallInput {
   discussions?: any
   githubRepos?: any[]
   existingSolutions?: any[]
+  /** The Summary's quick wins, the next steps when the overall has none of its own. */
+  quickWins?: any[]
   plan?: { stage3: any; stage4: any }
 }
 
 const answerLine = (answer: Answer, summary: string) => `<div class="callout"><b>${esc(answer)}.</b> ${esc(summary)}</div>`
+
+// A text written as paragraphs separated by blank lines
+const paras = (text: string) => text.split(/\n\s*\n/).map(para).join('')
+
+type Backed = Pick<Overall['problem'], 'answer' | 'evidence' | 'assumptions' | 'improve'>
+
+/** The closing subsection of each question: the evidence, the assumptions to check, and what would strengthen it. */
+function backing(q: Backed): DocSection[] {
+  const body =
+    keep('Evidence', bullets(q.evidence ?? [])) +
+    keep('Assumptions to check', table(['Assumption', 'How to check it'], (q.assumptions ?? []).map((a) => [esc(a.assumption), esc(a.check || '–')]))) +
+    keep(q.answer === 'Yes' ? 'What keeps it a Yes' : 'What would make it a Yes', bullets(q.improve ?? []))
+  return body ? [{ title: 'Evidence and what to check', body }] : []
+}
 
 function wholeIdea(input: OverallInput): DocSection {
   const o = input.overall
@@ -44,7 +63,7 @@ function wholeIdea(input: OverallInput): DocSection {
           `<div class="callout"><b>${esc(str(s.recommendation) || 'Verdict')}</b> · marked <b>${esc(mark ?? '–')}/10</b>` +
           (Number.isFinite(Number(s.successProbability)) ? ` · ${esc(s.successProbability)}% chance of success` : '') +
           `</div>` +
-          para(o.verdict) +
+          paras(o.verdict) +
           facts([
             ['Difficulty', s.difficultyLevel],
             ['Estimated build time', s2.estimatedTimeframe || s.estimatedTimeframe],
@@ -85,6 +104,7 @@ function problem(input: OverallInput): DocSection {
         title: 'What makes it different',
         body: para(p.differentiation) + (solutions.length ? table(['Existing solution', 'How this idea differs'], solutions) : ''),
       },
+      ...backing(p),
     ],
   }
 }
@@ -112,6 +132,7 @@ function build(input: OverallInput, timeline: string): DocSection {
       { title: 'Architecture', body: para(b.architecture) },
       { title: 'People, skills, and time', body: para(b.resources) + fit + team },
       { title: 'Gaps to close', body: bullets(b.gaps) },
+      ...backing(b),
     ],
   }
 }
@@ -141,6 +162,7 @@ function sustain(input: OverallInput): DocSection {
           s.dependencies.map((d) => [`<b>${esc(d.name)}</b>${d.usedFor ? `<br><span class="meta">${esc(d.usedFor)}</span>` : ''}`, esc(d.risk || '–'), esc(d.exit || '–')])
         ),
       },
+      ...backing(s),
     ],
   }
 }
@@ -154,7 +176,21 @@ function success(input: OverallInput): DocSection {
       { title: 'Business measures', body: table(['Measure', 'Target'], s.businessMetrics.map((m) => [esc(m.metric), `<b>${esc(m.target || '–')}</b>`])) },
       { title: 'Value for the people using it', body: para(s.userValue) },
       { title: 'Warning signs', body: bullets(s.warningSigns) },
+      ...backing(s),
     ],
+  }
+}
+
+function nextSteps(input: OverallInput): DocSection {
+  const own = input.overall.nextSteps ?? []
+  const steps = own.length
+    ? own.map((x, i) => [String(i + 1), `<b>${esc(x.step)}</b>`, esc(x.why || '–'), esc(x.effort || '–')])
+    : arr(input.quickWins).map((w, i) => [String(i + 1), `<b>${esc(w.title)}</b>`, esc(w.description || '–'), esc(w.timeEstimate || '–')])
+  return {
+    title: 'What to do next',
+    body: steps.length
+      ? `<p>In order: each step tests the riskiest part of the answers above before more is built on it.</p>` + table(['#', 'Step', 'Why', 'Effort'], steps)
+      : '',
   }
 }
 
@@ -182,7 +218,7 @@ export function buildOverall(input: OverallInput): DocumentSpec {
     title: str(s.projectTitle) || str(s.shortTitle) || 'Project idea',
     summary: input.idea,
     meta: input.context.filter((c) => c.value),
-    sections: [wholeIdea(input), problem(input), build(input, timeline), sustain(input), success(input), sources(input)],
+    sections: [wholeIdea(input), problem(input), build(input, timeline), sustain(input), success(input), nextSteps(input), sources(input)],
     colophon: 'Made with The Idea Evaluator.',
   }
 }

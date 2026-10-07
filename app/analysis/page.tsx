@@ -2155,6 +2155,7 @@ export default function AnalysisPage() {
       discussions: stageData.stage2?.discussions,
       githubRepos: stageData.stage2?.githubRepos,
       existingSolutions: stageData.stage2?.existingSolutions,
+      quickWins: stageData.stage2?.quickWins,
       plan: stageData.stage3 && stageData.stage4 ? { stage3: stageData.stage3, stage4: stageData.stage4 } : undefined,
     })
 

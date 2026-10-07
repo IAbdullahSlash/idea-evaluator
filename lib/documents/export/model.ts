@@ -207,8 +207,8 @@ function parseBody(html: string): Block[] {
 // A subsection this short stays on one page with its heading, so a heading is never left alone
 // at the foot of a page. Length is judged by characters and by lines (table rows, list items,
 // paragraphs), since a table is tall for its character count.
-const KEEP_TOGETHER_CHARS = 2500
-const KEEP_TOGETHER_LINES = 14
+const KEEP_TOGETHER_CHARS = 1200
+const KEEP_TOGETHER_LINES = 8
 const lineCount = (html: string) => (html.match(/<(tr|li|p|h4)[\s>]/g) ?? []).length
 
 export function toModel(spec: DocumentSpec): DocumentModel {

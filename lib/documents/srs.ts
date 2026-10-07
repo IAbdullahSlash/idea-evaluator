@@ -2,6 +2,7 @@ import { numberRequirements, type Srs } from '@/lib/schemas/srs'
 import type { Wireframes } from '@/lib/schemas/wireframes'
 import { numberStories, type Brief } from '@/lib/schemas/brief'
 import { screensTable, screenSection } from '@/lib/documents/screens'
+import { renderDataModel } from '@/lib/documents/datamodel'
 import { storyMapSections, visionStatement, type PlannedVersion } from '@/lib/documents/storymap'
 import { bullets, esc, keep, para, table, type DocSection, type DocumentSpec } from '@/lib/documents/template'
 
@@ -35,6 +36,7 @@ export function buildSrsDocument(srs: Srs, projectTitle: string, { brief, wirefr
   const o = srs.overview
   const q = srs.quality
   const frs = numberRequirements(srs)
+  const diagram = renderDataModel(q.entities)
 
   // NFR-n across the five groups, in the standard's order
   let nfrNo = 0
@@ -185,7 +187,9 @@ export function buildSrsDocument(srs: Srs, projectTitle: string, { brief, wirefr
       children: [
         {
           title: 'Data model',
-          body: q.entities
+          body:
+            (diagram ? `<figure class="wire">${diagram}</figure><p class="meta">The stored entities with their key fields, and how they relate. Each is described below.</p>` : '') +
+            q.entities
             .map((e) =>
               keep(
                 esc(e.name),

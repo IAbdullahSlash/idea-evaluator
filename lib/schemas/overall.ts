@@ -9,9 +9,11 @@ import { z } from 'zod'
  *   3 Can it be sustainably maintained and lived with?
  *   4 How will success be defined and measured?
  *
- * Each question gets a short answer (Yes, Partly, or No) and a reasoned
- * write-up of its two sides, drawn from the evaluation, the research, and
- * the plan.
+ * Each question gets a short answer (Yes, Partly, or No), a reasoned
+ * write-up of its two sides, the evidence behind the answer, the
+ * assumptions still to check, and what would strengthen it, all drawn from
+ * the evaluation, the research, and the plan. The steps to take next close
+ * the document.
  */
 
 const text = z.string().trim().min(1)
@@ -40,8 +42,16 @@ const answer = z.preprocess((v) => {
   return t ? 'Partly' : v
 }, z.enum(ANSWERS))
 
+// Every question also carries the evidence behind its answer, the assumptions still to check, and
+// what would strengthen it. They may be missing from an overall saved by an earlier version.
+const backing = {
+  evidence: texts,
+  assumptions: listOf(z.object({ assumption: text, check: optionalText })),
+  improve: texts,
+}
+
 export const overallSchema = z.object({
-  /** The idea as a whole, in one paragraph: worth building or not, and the main reason. */
+  /** The idea as a whole: worth building or not, and the main reasons. */
   verdict: text,
   problem: z.object({
     answer,
@@ -50,6 +60,7 @@ export const overallSchema = z.object({
     whoCares: text,
     urgency: text,
     differentiation: text,
+    ...backing,
   }),
   build: z.object({
     answer,
@@ -57,12 +68,14 @@ export const overallSchema = z.object({
     architecture: text,
     resources: text,
     gaps: texts,
+    ...backing,
   }),
   sustain: z.object({
     answer,
     summary: text,
     operations: text,
     dependencies: listOf(z.object({ name: text, usedFor: optionalText, risk: optionalText, exit: optionalText })),
+    ...backing,
   }),
   success: z.object({
     answer,
@@ -70,7 +83,10 @@ export const overallSchema = z.object({
     businessMetrics: listOf(z.object({ metric: text, target: optionalText })).refine((l) => l.length > 0, 'No business measures'),
     userValue: text,
     warningSigns: texts,
+    ...backing,
   }),
+  /** What to do next, in order. */
+  nextSteps: listOf(z.object({ step: text, why: optionalText, effort: optionalText })),
 })
 
 export type Overall = z.infer<typeof overallSchema>

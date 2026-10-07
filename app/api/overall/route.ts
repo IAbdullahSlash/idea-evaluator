@@ -35,6 +35,11 @@ function planContext(plan: any): string {
   )
 }
 
+// The evidence, assumptions, and improvements every question carries
+const BACKING = `"evidence": ["a fact from the information above that supports this answer, with its number or source"],
+    "assumptions": [ { "assumption": "something this answer takes for granted that isn't proven yet", "check": "a cheap, quick way to test it before building much" } ],
+    "improve": ["a concrete change that would move this answer towards Yes, or keep it a Yes"]`
+
 function overallPrompt(body: any): string {
   const alternatives = (Array.isArray(body.existingSolutions) ? body.existingSolutions : [])
     .slice(0, 5)
@@ -52,41 +57,47 @@ The four questions:
 
 Respond with ONLY valid JSON in exactly this shape:
 {
-  "verdict": "one paragraph: the idea as a whole, whether it is worth building, and the main reason",
+  "verdict": "two paragraphs separated by a blank line: first the idea as a whole and whether it is worth building, then the main reasons and the condition it depends on most",
   "problem": {
     "answer": "Yes" | "Partly" | "No",
     "summary": "2-3 sentences answering the question directly",
-    "painPoint": "the specific pain, stated explicitly: what goes wrong today, for whom, and what it costs them",
-    "whoCares": "who has this problem, who would pay or switch, and the evidence for it",
-    "urgency": "how urgent, frequent, or expensive the problem is, and the workarounds people use today",
-    "differentiation": "how this differs from the alternatives, whether that is a 10x improvement or a lasting advantage, and what happens to adoption if not"
+    "painPoint": "the specific pain, stated explicitly: what goes wrong today, for whom, how often, and what it costs them",
+    "whoCares": "who has this problem, who would pay or switch, how many of them there are, and the evidence for it",
+    "urgency": "how urgent, frequent, or expensive the problem is, and the workarounds people use today and what those cost",
+    "differentiation": "how this differs from each main alternative, whether that is a 10x improvement or a lasting advantage, and what happens to adoption if not",
+    ${BACKING}
   },
   "build": {
     "answer": "Yes" | "Partly" | "No",
     "summary": "2-3 sentences answering the question directly",
-    "architecture": "whether the planned architecture gives the availability, data security, and maintainability this product needs, and where it is weakest",
-    "resources": "whether the builder has or can get the skills, framework expertise, and environment, and whether the timeline has margin",
-    "gaps": ["a specific gap to close before or during the build, and how"]
+    "architecture": "whether the planned architecture gives the availability, data security, and maintainability this product needs, where it is weakest, and what load it would handle before needing changes",
+    "resources": "whether the builder has or can get the skills, framework expertise, and environment, which parts will take longest, and whether the timeline has margin",
+    "gaps": ["a specific gap to close before or during the build, and how"],
+    ${BACKING}
   },
   "sustain": {
     "answer": "Yes" | "Partly" | "No",
     "summary": "2-3 sentences answering the question directly",
-    "operations": "the infrastructure to run, how performance holds up as usage grows, where technical debt will build up, and the ongoing cost and effort",
-    "dependencies": [ { "name": "a third-party service, API, or framework it relies on", "usedFor": "what it does here", "risk": "what happens if support is cut, prices rise, or the roadmap changes", "exit": "the way out: an alternative, or how to keep it replaceable" } ]
+    "operations": "the infrastructure to run, how performance holds up as usage grows, where technical debt will build up, and the ongoing cost and hours each month",
+    "dependencies": [ { "name": "a third-party service, API, or framework it relies on", "usedFor": "what it does here", "risk": "what happens if support is cut, prices rise, or the roadmap changes", "exit": "the way out: an alternative, or how to keep it replaceable" } ],
+    ${BACKING}
   },
   "success": {
     "answer": "Yes" | "Partly" | "No",
     "summary": "2-3 sentences answering the question directly",
     "businessMetrics": [ { "metric": "a hard measure of return", "target": "the number that means success, and by when" } ],
-    "userValue": "what success looks like for the people using it: the workflows they complete, how quickly, and with how little friction",
-    "warningSigns": ["a measurable sign users are struggling or abandoning it"]
-  }
+    "userValue": "what success looks like for the people using it: the workflows they complete, how quickly, how often, and with how little friction",
+    "warningSigns": ["a measurable sign users are struggling or abandoning it, and the threshold that should trigger action"],
+    ${BACKING}
+  },
+  "nextSteps": [ { "step": "a concrete action", "why": "what it proves or unblocks", "effort": "e.g. '2 days'" } ]
 }
 
 Rules:
 - "answer" is the honest short answer to each question: "Yes", "Partly", or "No". Don't soften a weak idea.
-- Each text field is 2 to 4 sentences, specific to this idea, with numbers wherever the information above gives them.
-- gaps: 2 to 4. dependencies: 2 to 5, the ones the plan's stack and costs actually rely on. businessMetrics: 3 or 4, each with a number. warningSigns: 2 or 3.
+- Each text field other than "summary" is a full paragraph of 4 to 6 sentences: specific to this idea, explained rather than asserted, with numbers wherever the information above gives them.
+- Each question: evidence 3 or 4, assumptions 2 or 3, improve 2 or 3.
+- gaps: 3 or 4. dependencies: 3 to 5, the ones the plan's stack and costs actually rely on. businessMetrics: 4, each with a number. warningSigns: 3. nextSteps: 4 or 5, in the order to do them, the first doable this week.
 - Base everything on the information above. Where something is unknown, say what would need to be found out instead of inventing it.`
 }
 

@@ -3,16 +3,65 @@ import { cellText, COLORS, NARROW_COLUMNS, sectionNumber, type Block, type Cell,
 
 /**
  * A document model as a PDF, with pdfmake: an A4 cover page, a contents page
- * with page numbers, each chapter on a new page, a running title at the top
- * and "Page n of m" at the foot. Built in the browser; pdfmake is loaded only
- * when someone downloads.
+ * with page numbers, then the chapters one after another, with a running
+ * title at the top and "Page n of m" at the foot. Built in the browser;
+ * pdfmake is loaded only when someone downloads.
+ *
+ * pdfmake can keep a block on one page ("unbreakable") but drops whatever of
+ * it doesn't fit on that page, so blocks are only kept together when their
+ * estimated height fits comfortably.
  */
 
 const c = (hex: string) => `#${hex}`
 const MM = 72 / 25.4
 const PAGE_WIDTH = 595.28
+const PAGE_HEIGHT = 841.89
 const MARGIN = { top: 22 * MM, side: 18 * MM, bottom: 20 * MM }
 const CONTENT_WIDTH = PAGE_WIDTH - 2 * MARGIN.side
+// Blocks estimated taller than this are never kept together; a heading is only held with what follows up to SHORT
+const FITS = (PAGE_HEIGHT - MARGIN.top - MARGIN.bottom) * 0.8
+const SHORT = 260
+const KEEP_WHOLE = 320
+
+// ── estimated heights, in points ─────────────────────────────────────────
+
+const LINE = 13.5
+const lines = (chars: number, width: number) => Math.max(1, Math.ceil(chars / Math.max(8, width / 5.3)))
+const runChars = (runs: Run[]) => runs.reduce((n, r) => n + r.text.length, 0)
+
+function height(list: Block[], width = CONTENT_WIDTH): number {
+  return list.reduce((sum, b) => sum + blockHeight(b, width), 0)
+}
+
+function blockHeight(b: Block, width: number): number {
+  switch (b.kind) {
+    case 'para':
+      return lines(runChars(b.runs), width - (b.style === 'callout' || b.style === 'vision' ? 14 : 0)) * LINE + (b.style === 'callout' || b.style === 'vision' ? 24 : 6)
+    case 'subheading':
+      return 28
+    case 'list':
+      return b.items.reduce((n, item) => n + lines(runChars(item), width - 12) * LINE + 2, 8)
+    case 'table': {
+      const cols = Math.max(1, b.table.head.length || b.table.rows[0]?.cells.length || 1)
+      const row = (cells: Cell[]) => Math.max(...cells.map((cl) => height(cl.blocks, (width / cols) * cl.colSpan - 12)), LINE) + 8
+      return (b.table.head.length ? 22 : 0) + b.table.rows.reduce((n, r) => n + row(r.cells), 14)
+    }
+    case 'columns':
+      return Math.max(...b.columns.map((col) => height(col, width / b.columns.length))) + 6
+    case 'figure': {
+      const maxW = b.mobile ? 62 * MM : width
+      const w = Math.min(maxW, ((b.mobile ? 135 : 165) * MM * b.width) / b.height)
+      return (w * b.height) / b.width + 12
+    }
+    case 'card':
+      return lines(runChars(b.runs), width) * 11 + 18
+    case 'group':
+      return height(b.blocks, width) + 6
+  }
+}
+
+/** Blocks kept on one page when they fit, otherwise left to break. */
+const together = (content: Content[], estimate: number): Content[] => (estimate < FITS ? [{ stack: content, unbreakable: true }] : content)
 
 // ── inline text ──────────────────────────────────────────────────────────
 
@@ -46,7 +95,17 @@ const callout = (content: Content, fontSize: number): Content => ({
 })
 
 function blocks(list: Block[], width = CONTENT_WIDTH): Content[] {
-  return list.map((b) => block(b, width))
+  const out: Content[] = []
+  for (let i = 0; i < list.length; i++) {
+    const b = list[i]
+    const next = list[i + 1]
+    // A small heading stays with what follows it, when that is short enough to move with it
+    if (b.kind === 'subheading' && next && blockHeight(next, width) < SHORT) {
+      out.push({ stack: [block(b, width), block(next, width)], unbreakable: true })
+      i++
+    } else out.push(block(b, width))
+  }
+  return out
 }
 
 function block(b: Block, width: number): Content {
@@ -59,7 +118,7 @@ function block(b: Block, width: number): Content {
         ...(b.style === 'empty' ? { italics: true, color: c(COLORS.pencil) } : b.style === 'meta' ? { color: c(COLORS.pencil), fontSize: 9 } : {}),
       }
     case 'subheading':
-      return { text: text(b.runs), fontSize: 11, bold: true, margin: [0, 10, 0, 3], headlineLevel: 4 } as Content
+      return { text: text(b.runs), fontSize: 11, bold: true, margin: [0, 10, 0, 3] }
     case 'list':
       return { ul: b.items.map((runs) => ({ text: text(runs), margin: [0, 1, 0, 1] })), margin: [0, 2, 0, 6] }
     case 'table':
@@ -83,7 +142,7 @@ function block(b: Block, width: number): Content {
         margin: [0, 0, 0, 4],
       }
     case 'group':
-      return { stack: blocks(b.blocks, width), unbreakable: true, margin: [0, 0, 0, 6] }
+      return { stack: blocks(b.blocks, width), unbreakable: blockHeight(b, width) < FITS || undefined, margin: [0, 0, 0, 6] }
   }
 }
 
@@ -121,7 +180,8 @@ function table(t: TableModel, width: number): ContentTable {
   const totalRows = new Set(t.rows.flatMap((r, i) => (r.style === 'total' ? [i + (t.head.length ? 1 : 0)] : [])))
 
   return {
-    table: { headerRows: t.head.length ? 1 : 0, widths, body, dontBreakRows: true },
+    // The heading row repeats on each page and never sits at the foot of a page without a row under it
+    table: { headerRows: t.head.length ? 1 : 0, keepWithHeaderRows: t.head.length ? 1 : 0, widths, body, dontBreakRows: true },
     fontSize: t.storymap ? 8.5 : 9.5,
     layout: {
       hLineWidth: (i, node) => (i === 0 ? 0 : totalRows.has(i) ? 1.5 : i === 1 && t.head.length ? 0.75 : i === node.table.body.length ? 0.5 : 0.5),
@@ -149,19 +209,46 @@ function heading(s: ModelSection): Content {
     ? { tocItem: true, tocStyle: s.depth === 1 ? { bold: true } : { color: c(COLORS.soft), fontSize: 9.5 }, tocMargin: s.depth === 1 ? [0, 8, 0, 0] : [22, 3, 0, 0] }
     : {}
   if (s.depth === 1) {
-    // Each chapter starts a page; the first follows the contents page's own break
     return {
       stack: [{ text: label, fontSize: 17, bold: true, ...toc }, { canvas: [{ type: 'line', x1: 0, y1: 4, x2: CONTENT_WIDTH, y2: 4, lineWidth: 1.5, lineColor: c(COLORS.ink) }] }],
-      pageBreak: 'before',
-      margin: [0, 0, 0, 12],
-    }
+      margin: [0, 26, 0, 12],
+    } as Content
   }
-  return { text: label, fontSize: s.depth === 2 ? 12.5 : 11, bold: true, margin: [0, s.depth === 2 ? 16 : 12, 0, 5], headlineLevel: s.depth, ...toc } as Content
+  return { text: label, fontSize: s.depth === 2 ? 12.5 : 11, bold: true, margin: [0, s.depth === 2 ? 16 : 12, 0, 5], ...toc } as Content
 }
 
-function section(s: ModelSection): Content[] {
-  const content = [heading(s), ...blocks(s.blocks)]
-  return s.keepTogether ? [{ stack: content, unbreakable: true }] : content
+/**
+ * The sections one after another. A heading never ends a page on its own: it is held with the
+ * start of its content (and a chapter heading with no content of its own with its first
+ * subsection), and a short subsection stays on one page with its heading.
+ */
+function sections(list: ModelSection[]): Content[] {
+  const out: Content[] = []
+  let pending: Content[] = []
+  let pendingHeight = 0
+  for (const s of list) {
+    const lead = [...pending, heading(s)]
+    const leadHeight = pendingHeight + (s.depth === 1 ? 50 : 32)
+    pending = []
+    pendingHeight = 0
+    if (!s.blocks.length) {
+      pending = lead
+      pendingHeight = leadHeight
+      continue
+    }
+    // Only a small subsection moves whole to the next page, or a heading with its wireframe;
+    // anything bigger would leave too much of the page empty, so it breaks with its heading held
+    const whole = leadHeight + height(s.blocks)
+    const limit = s.blocks.some((b) => b.kind === 'figure') ? FITS : KEEP_WHOLE
+    if (s.keepTogether && whole < limit) {
+      out.push({ stack: [...lead, ...blocks(s.blocks)], unbreakable: true })
+      continue
+    }
+    const [first, ...rest] = s.blocks
+    out.push(...(blockHeight(first, CONTENT_WIDTH) < SHORT ? together([...lead, ...blocks([first])], leadHeight + blockHeight(first, CONTENT_WIDTH)) : [...lead, ...blocks([first])]))
+    out.push(...blocks(rest))
+  }
+  return [...out, ...pending]
 }
 
 function cover(m: DocumentModel): Content[] {
@@ -204,7 +291,9 @@ export function pdfDefinition(m: DocumentModel): TDocumentDefinitions {
       ...cover(m),
       ...revisions,
       { toc: { title: { text: 'Contents', fontSize: 16, bold: true, margin: [0, 0, 0, 10] }, numberStyle: { color: c(COLORS.pencil) } }, pageBreak: 'before' },
-      ...m.sections.flatMap(section),
+      // The chapters start on the page after the contents, then run on
+      { text: '', pageBreak: 'after' },
+      ...sections(m.sections),
       ...(m.colophon
         ? [
             { canvas: [{ type: 'line', x1: 0, y1: 0, x2: CONTENT_WIDTH, y2: 0, lineWidth: 0.5, lineColor: c(COLORS.rule) }], margin: [0, 28, 0, 6] } as Content,
@@ -212,8 +301,6 @@ export function pdfDefinition(m: DocumentModel): TDocumentDefinitions {
           ]
         : []),
     ],
-    // A heading never ends a page on its own: if nothing follows it there, it moves to the next page
-    pageBreakBefore: (node, following) => Boolean((node as { headlineLevel?: number }).headlineLevel) && following.length === 0,
   }
 }
 

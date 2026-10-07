@@ -18,13 +18,17 @@ export const OVERALL_GUIDE = `Write "Idea as an overall", then call save_overall
 2. Can it realistically be built and scaled? Architecture: can this builder deliver the availability, data security, and long-term maintainability it needs? Resources: do they have, or can they get, the skills, framework expertise, and environment to finish within the time available, with some margin?
 3. Can it be sustainably maintained and lived with? Running software often costs more than building it. Operations: infrastructure, performance as usage grows, technical debt. Dependencies: for each third-party service or library it leans on, what if the provider cuts support, raises prices, or changes direction, and what is the way out?
 4. How will success be defined and measured? Business measures: hard numbers that show it pays off (efficiency, growth, cost saved, users won). User value: what success means for the people using it, and the signs they are struggling or giving up.
-- Each question gets an honest answer (Yes, Partly, or No) and a 2-3 sentence summary; each other text field is 2-4 sentences, specific, with numbers from the plan where it has them.
+- Each question gets an honest answer (Yes, Partly, or No) and a 2-3 sentence summary. Every other text field is a full paragraph of 4-6 sentences: specific, explained rather than asserted, with numbers from the plan and research where they exist. This is a document people read in full, so don't be brief.
+- Each question also gets its evidence (3-4 facts with their numbers or sources), the assumptions it rests on with a cheap way to check each (2-3), and what would make it a Yes or keep it one (2-3).
+- End with 4-5 next steps in order, the first doable this week.
 - Where something is unknown, say what would need to be found out instead of inventing it.`
 
 export const OVERALL_WRITEUP = `Now write it up for the user, in Markdown:
 ## Idea as an overall
 > The verdict.
-Then for each of the four questions, a ### heading with the question and its answer (Yes, Partly, or No), the summary, and the reasoning under it: for 1, the pain point, who cares, urgency, and what makes it different; for 2, the architecture, the people, skills, and time, and the gaps to close; for 3, running it and the dependencies with their ways out (a table); for 4, the business measures (a table), the value for users, and the warning signs.
+Then for each of the four questions, a ### heading with the question and its answer (Yes, Partly, or No), the summary, and the reasoning under it: for 1, the pain point, who cares, urgency, and what makes it different; for 2, the architecture, the people, skills, and time, and the gaps to close; for 3, running it and the dependencies with their ways out (a table); for 4, the business measures (a table), the value for users, and the warning signs. Close each question with its evidence, the assumptions to check (a table), and what would make it a Yes.
+### What to do next
+The steps in order, with why and how long each takes.
 Tell them the Hand-off page has it as a PDF or Word download, then give the link and ask whether to go on to the product brief and story map, which the requirements document (SRS) builds on.`
 
 export const BRIEF_GUIDE = `Write the product brief, then call save_brief.
@@ -61,8 +65,8 @@ Mention that the drawn wireframes are printed in the SRS, then give the link and
 export const SRS_GUIDE = `Write the software requirements specification (IEEE 830 / ISO/IEC/IEEE 29148 style) in three parts, calling save_srs_overview, save_srs_features, and save_srs_quality. Each saves on its own; the document is complete when all three are saved.
 - Requirements are single, testable "The system shall …" statements.
 - Overview: purpose, scope in and out, definitions a reviewer might not know, perspective, 4-8 product functions, 2-4 user classes, operating environment, constraints, documentation, assumptions, dependencies, UI principles, and the hardware, software, and communications interfaces.
-- Features: 4-8 features covering every user story, each with 2-4 stimulus/response pairs and 2-5 requirements with 1-3 acceptance criteria. Each requirement cites the story ids it fulfils and the screen names (exactly as in the wireframes) where it shows up. Priority: Must = must-have features; Should = other features the planned versions include; Could = nice-to-haves and anything the plan cuts.
-- Quality: 2-4 performance, security, and quality-attribute requirements, each with a number in its measure; safety and business rules only where they apply. Include the plan's security work and any regulation that applies to the data. 3-7 data entities with their key fields and relations, data retention, and 3-6 open questions.
+- Features: 4-8 features covering every user story, each with 2-4 stimulus/response pairs and 2-5 requirements with 2-3 acceptance criteria, each a concrete pass/fail check with its numbers. Each requirement cites the story ids it fulfils and the screen names (exactly as in the wireframes) where it shows up. Priority: Must = must-have features; Should = other features the planned versions include; Could = nice-to-haves and anything the plan cuts.
+- Quality: 2-4 performance, security, and quality-attribute requirements, each with a number in its measure; safety and business rules only where they apply. Include the plan's security work and any regulation that applies to the data. 3-7 data entities with their key fields and relations (each "<Entity> has many <Entity>", "has one", or "belongs to", with the entity names exactly, so they can be drawn as a diagram), data retention, and 3-6 open questions.
 - Base everything on the evaluation, the plan, the story map, and the wireframes. Put anything undecided in an open question instead of inventing it.`
 
 export const SRS_WRITEUP = `Now write the SRS up for the user, in Markdown:

@@ -3,7 +3,7 @@ import { cellText, COLORS, NARROW_COLUMNS, sectionNumber, type Block, type Cell,
 
 /**
  * A document model as a Word file, with docx: an A4 cover page, a contents
- * page linking to each section, each chapter on a new page, a running title
+ * page linking to each section, then the chapters one after another, a running title
  * at the top and "Page n of m" at the foot. Wireframes are drawn into PNG
  * images first, since Word can't show every SVG. Built in the browser; docx
  * is loaded only when someone downloads.
@@ -282,16 +282,16 @@ function buildDocx(d: typeof Docx, m: DocumentModel, images: Map<string, Uint8Ar
 
   const anchor = (s: ModelSection) => `s${s.number.replace(/\./g, '_')}`
 
-  function heading(s: ModelSection): Docx.Paragraph {
+  function heading(s: ModelSection, first: boolean): Docx.Paragraph {
     const no = sectionNumber(s)
     const size = s.depth === 1 ? 17 : s.depth === 2 ? 12.5 : 11
     return new d.Paragraph({
       heading: s.depth === 1 ? d.HeadingLevel.HEADING_1 : s.depth === 2 ? d.HeadingLevel.HEADING_2 : d.HeadingLevel.HEADING_3,
-      // Each chapter starts a page
-      pageBreakBefore: s.depth === 1,
+      // The chapters start on the page after the contents, then run on
+      pageBreakBefore: first,
       keepNext: true,
       keepLines: true,
-      spacing: { before: s.depth === 1 ? 0 : s.depth === 2 ? 320 : 240, after: s.depth === 1 ? 240 : 100 },
+      spacing: { before: first ? 0 : s.depth === 1 ? 560 : s.depth === 2 ? 320 : 240, after: s.depth === 1 ? 240 : 100 },
       border: s.depth === 1 ? { bottom: { style: d.BorderStyle.SINGLE, size: 12, color: COLORS.ink, space: 4 } } : undefined,
       children: [
         new d.Bookmark({
@@ -372,7 +372,7 @@ function buildDocx(d: typeof Docx, m: DocumentModel, images: Map<string, Uint8Ar
       ),
   ]
 
-  const body: Child[] = m.sections.flatMap((s) => [heading(s), ...blocks(s.blocks, CONTENT_WIDTH, s.keepTogether)])
+  const body: Child[] = m.sections.flatMap((s, i) => [heading(s, i === 0), ...blocks(s.blocks, CONTENT_WIDTH, s.keepTogether)])
   if (m.colophon) {
     body.push(
       new d.Paragraph({
