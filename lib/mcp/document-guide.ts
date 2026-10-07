@@ -1,15 +1,31 @@
 /**
- * Guidance for the Hand-off documents, for the user's own AI: the product
- * brief (vision and story map), the wireframes, and the SRS. Adapted from the
+ * Guidance for the Hand-off documents, for the user's own AI: "Idea as an
+ * overall" (the four questions), the product brief (vision and story map),
+ * the wireframes, and the SRS. Adapted from the
  * prompts the website sends to its own model; each tool's reply carries the
  * next document's guidance and how to write the saved one up in the chat.
  */
 
-export const DOCUMENTS_OFFER = `The Hand-off page can also hold three documents, written by you in this chat:
-1. The product brief: a vision statement, personas, goals, and a user story map (save_brief)
-2. Wireframes of the key screens (save_wireframes)
-3. A detailed software requirements specification (SRS) that traces back to the stories and screens (save_srs_overview, save_srs_features, save_srs_quality)
-Ask the user whether they want them. They go in this order, because each builds on the one before.`
+export const DOCUMENTS_OFFER = `The Hand-off page can also hold documents written by you in this chat, which the user downloads there as PDF or Word files:
+1. Idea as an overall: the idea judged against four questions (the problem and who cares, building and scaling it, maintaining it, measuring success) (save_overall)
+2. The product brief: a vision statement, personas, goals, and a user story map (save_brief)
+3. Wireframes of the key screens (save_wireframes)
+4. A detailed software requirements specification (SRS) that traces back to the stories and screens, with the story map and wireframes printed in it (save_srs_overview, save_srs_features, save_srs_quality)
+Ask the user whether they want them. Start with Idea as an overall; the other three go in order, because each builds on the one before.`
+
+export const OVERALL_GUIDE = `Write "Idea as an overall", then call save_overall. Judge the idea frankly against four questions, from the evaluation, the research, and the plan:
+1. What specific problem does this solve, and who actually cares? Many projects fail because they build a technically perfect solution to a problem nobody has. State the pain point explicitly instead of assuming it: is it urgent, frequent, or expensive enough that people already look for workarounds? How does it differ from the alternatives: a 10x improvement, or an advantage others can't easily copy? If not, adoption will stall.
+2. Can it realistically be built and scaled? Architecture: can this builder deliver the availability, data security, and long-term maintainability it needs? Resources: do they have, or can they get, the skills, framework expertise, and environment to finish within the time available, with some margin?
+3. Can it be sustainably maintained and lived with? Running software often costs more than building it. Operations: infrastructure, performance as usage grows, technical debt. Dependencies: for each third-party service or library it leans on, what if the provider cuts support, raises prices, or changes direction, and what is the way out?
+4. How will success be defined and measured? Business measures: hard numbers that show it pays off (efficiency, growth, cost saved, users won). User value: what success means for the people using it, and the signs they are struggling or giving up.
+- Each question gets an honest answer (Yes, Partly, or No) and a 2-3 sentence summary; each other text field is 2-4 sentences, specific, with numbers from the plan where it has them.
+- Where something is unknown, say what would need to be found out instead of inventing it.`
+
+export const OVERALL_WRITEUP = `Now write it up for the user, in Markdown:
+## Idea as an overall
+> The verdict.
+Then for each of the four questions, a ### heading with the question and its answer (Yes, Partly, or No), the summary, and the reasoning under it: for 1, the pain point, who cares, urgency, and what makes it different; for 2, the architecture, the people, skills, and time, and the gaps to close; for 3, running it and the dependencies with their ways out (a table); for 4, the business measures (a table), the value for users, and the warning signs.
+Tell them the Hand-off page has it as a PDF or Word download, then give the link and ask whether to go on to the product brief and story map, which the requirements document (SRS) builds on.`
 
 export const BRIEF_GUIDE = `Write the product brief, then call save_brief.
 - Vision: one sentence in the form "For <users> who <need>, <product> is a <category> that <benefit>. Unlike <alternative>, it <difference>." Use the Summary's existing solutions for the alternative.
@@ -40,7 +56,7 @@ export const WIREFRAMES_GUIDE = `Sketch the key screens, then call save_wirefram
 export const WIREFRAMES_WRITEUP = `Now describe the screens for the user, in Markdown:
 ## Wireframes
 A table of the screens (screen, device, what the user does, stories, leads to), then for each screen a short paragraph on what is on it and why, with its design notes.
-Mention that the drawn wireframes are on the Hand-off page's report, then give the link and ask whether to go on to the SRS.`
+Mention that the drawn wireframes are printed in the SRS, then give the link and ask whether to go on to the SRS.`
 
 export const SRS_GUIDE = `Write the software requirements specification (IEEE 830 / ISO/IEC/IEEE 29148 style) in three parts, calling save_srs_overview, save_srs_features, and save_srs_quality. Each saves on its own; the document is complete when all three are saved.
 - Requirements are single, testable "The system shall …" statements.

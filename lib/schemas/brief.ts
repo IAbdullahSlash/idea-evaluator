@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 /**
- * The product brief: the Report's product vision and user story map.
+ * The product brief: the product vision and user story map the SRS traces to.
  *
  * The vision statement follows Geoffrey Moore's template ("For … who …, the …
  * is a … that …. Unlike …, it …"). The story map follows Jeff Patton's: a

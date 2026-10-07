@@ -1,26 +1,53 @@
 import type { McpServer } from '@modelcontextprotocol/server'
 import { alignReleases, briefSchema, numberStories, type Brief } from '@/lib/schemas/brief'
+import { overallSchema, QUESTIONS, type Overall } from '@/lib/schemas/overall'
 import { tidyWireframes, wireframesSchema, type Wireframes } from '@/lib/schemas/wireframes'
 import { numberRequirements, srsFeaturesSchema, srsOverviewSchema, srsQualitySchema, tidySrs } from '@/lib/schemas/srs'
 import type { StoredEvaluation } from '@/lib/store'
 import { fail, isFail, issues, load, ok, store } from '@/lib/mcp/helpers'
-import { briefInput, srsFeaturesInput, srsOverviewInput, srsQualityInput, wireframesInput } from '@/lib/mcp/document-contracts'
-import { BRIEF_WRITEUP, SRS_GUIDE, SRS_WRITEUP, WIREFRAMES_GUIDE, WIREFRAMES_WRITEUP } from '@/lib/mcp/document-guide'
+import { briefInput, overallInput, srsFeaturesInput, srsOverviewInput, srsQualityInput, wireframesInput } from '@/lib/mcp/document-contracts'
+import { BRIEF_GUIDE, BRIEF_WRITEUP, OVERALL_WRITEUP, SRS_GUIDE, SRS_WRITEUP, WIREFRAMES_GUIDE, WIREFRAMES_WRITEUP } from '@/lib/mcp/document-guide'
 
 /**
- * The Hand-off documents over MCP: the product brief (vision and story map),
- * the wireframes, and the SRS in three parts. Each is checked with the
- * website's own schemas and numbered and traced the same way, then saved
- * where the Hand-off page's Report and SRS read it.
+ * The Hand-off documents over MCP: "Idea as an overall", the product brief
+ * (vision and story map), the wireframes, and the SRS in three parts. Each is
+ * checked with the website's own schemas and numbered and traced the same
+ * way, then saved where the Hand-off page reads it for its downloads.
  */
 
-type Stage5 = { brief?: Brief; wireframes?: Wireframes; srs?: unknown }
+type Stage5 = { overall?: Overall; brief?: Brief; wireframes?: Wireframes; srs?: unknown }
 type SrsDraft = { overview?: unknown; features?: { features: unknown[] }; quality?: unknown }
 
 const stage5Of = (e: StoredEvaluation) => (e.stageData.stage5 ?? {}) as Stage5
 const PLAN_FIRST = 'Save the plan first (save_plan): the documents build on its versions and scope.'
 
 export function registerDocumentTools(server: McpServer, link: (id: string) => string): void {
+  server.registerTool(
+    'save_overall',
+    {
+      title: 'Save Idea as an overall',
+      description:
+        'Save "Idea as an overall": the idea judged against four questions (what problem it solves and who cares; whether it can be built and scaled; whether it can be maintained and lived with; how success is measured), each with a Yes, Partly, or No answer and the reasoning. Call after save_plan. The Hand-off page offers it as a PDF and a Word download.',
+      inputSchema: overallInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    },
+    async ({ evaluationId, ...raw }) => {
+      const evaluation = await load(evaluationId)
+      if (isFail(evaluation)) return evaluation
+      if (!evaluation.stageData.stage3) return fail(PLAN_FIRST)
+      const parsed = overallSchema.safeParse(raw)
+      if (!parsed.success) return fail(`Idea as an overall is incomplete: ${issues(parsed.error)}. Fix it and call save_overall again.`)
+
+      const overall = parsed.data
+      const failed = await store({ ...evaluation, stageData: { ...evaluation.stageData, stage5: { ...stage5Of(evaluation), overall } } })
+      if (failed) return failed
+      return ok(
+        `Idea as an overall saved: ${QUESTIONS.map((q, i) => `${i + 1}. ${overall[q.id].answer}`).join(', ')}.` +
+          `\nLink: ${link(evaluationId)}\n\n${OVERALL_WRITEUP}\n\nIf they want to continue: ${BRIEF_GUIDE}`
+      )
+    }
+  )
+
   server.registerTool(
     'save_brief',
     {

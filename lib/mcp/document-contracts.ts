@@ -1,14 +1,75 @@
 import { z } from 'zod'
 
 /**
- * What the user's AI sends for the Hand-off documents: the product brief
- * (vision and user story map), the wireframes, and the SRS in three parts.
+ * What the user's AI sends for the Hand-off documents: "Idea as an overall"
+ * (the four questions), the product brief (vision and user story map), the
+ * wireframes, and the SRS in three parts.
  * Strict and described, like the stage contracts in ./contracts.ts; the
  * server then runs the website's own schemas, numbering, and checks.
  */
 
 const id = z.string().min(8).max(32).describe('The evaluationId returned by start_evaluation.')
 const sentence = (what: string) => z.string().min(1).describe(what)
+
+// ── idea as an overall: the four questions ─────────────────────────────
+
+const answer = z.enum(['Yes', 'Partly', 'No']).describe('The honest short answer to the question. Don’t soften a weak idea.')
+const summary = sentence('2-3 sentences answering the question directly.')
+
+export const overallInput = z.object({
+  evaluationId: id,
+  verdict: sentence('One paragraph: the idea as a whole, whether it is worth building, and the main reason.'),
+  problem: z
+    .object({
+      answer,
+      summary,
+      painPoint: sentence('The specific pain, stated explicitly: what goes wrong today, for whom, and what it costs them.'),
+      whoCares: sentence('Who has this problem, who would pay or switch, and the evidence for it.'),
+      urgency: sentence('How urgent, frequent, or expensive the problem is, and the workarounds people use today.'),
+      differentiation: sentence('How it differs from the alternatives, whether that is a 10x improvement or a lasting advantage, and what happens to adoption if not.'),
+    })
+    .describe('Question 1: What specific problem does this solve, and who actually cares?'),
+  build: z
+    .object({
+      answer,
+      summary,
+      architecture: sentence('Whether the planned architecture gives the availability, data security, and maintainability this product needs, and where it is weakest.'),
+      resources: sentence('Whether the builder has or can get the skills, framework expertise, and environment, and whether the timeline has margin.'),
+      gaps: z.array(z.string()).min(2).max(4).describe('Specific gaps to close before or during the build, and how.'),
+    })
+    .describe('Question 2: Can it realistically be built and scaled?'),
+  sustain: z
+    .object({
+      answer,
+      summary,
+      operations: sentence('The infrastructure to run, how performance holds up as usage grows, where technical debt will build up, and the ongoing cost and effort.'),
+      dependencies: z
+        .array(
+          z.object({
+            name: sentence('A third-party service, API, or framework it relies on.'),
+            usedFor: sentence('What it does here.'),
+            risk: sentence('What happens if support is cut, prices rise, or the roadmap changes.'),
+            exit: sentence('The way out: an alternative, or how to keep it replaceable.'),
+          })
+        )
+        .min(2)
+        .max(5)
+        .describe('The dependencies the plan’s stack and costs actually rely on.'),
+    })
+    .describe('Question 3: Can it be sustainably maintained and lived with?'),
+  success: z
+    .object({
+      answer,
+      summary,
+      businessMetrics: z
+        .array(z.object({ metric: sentence('A hard measure of return.'), target: sentence('The number that means success, and by when.') }))
+        .min(3)
+        .max(4),
+      userValue: sentence('What success looks like for the people using it: the workflows they complete, how quickly, and with how little friction.'),
+      warningSigns: z.array(z.string()).min(2).max(3).describe('Measurable signs users are struggling or abandoning it.'),
+    })
+    .describe('Question 4: How will success be defined and measured?'),
+})
 
 // ── product brief: vision and user story map ───────────────────────────
 

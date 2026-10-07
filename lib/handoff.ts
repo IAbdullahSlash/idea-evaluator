@@ -69,10 +69,8 @@ export function hireLinks(roles: Role[]): HireLink[] {
   })
 }
 
-/** Save text as a file through the browser's download. */
-export function downloadText(filename: string, text: string, type: string): void {
-  // No byte-order mark: Jira's importer would read it as part of the first column's name
-  const blob = new Blob([text], { type })
+/** Save a file through the browser's download. */
+export function downloadBlob(filename: string, blob: Blob): void {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -83,19 +81,10 @@ export function downloadText(filename: string, text: string, type: string): void
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
-/**
- * Open an HTML document in a new tab. Returns false when the browser blocked
- * the tab; the document is then saved as a file so it isn't lost.
- */
-export function openHtml(html: string, filename: string): boolean {
-  const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }))
-  if (window.open(url, '_blank')) {
-    setTimeout(() => URL.revokeObjectURL(url), 60_000)
-    return true
-  }
-  URL.revokeObjectURL(url)
-  downloadText(filename, html, 'text/html')
-  return false
+/** Save text as a file through the browser's download. */
+export function downloadText(filename: string, text: string, type: string): void {
+  // No byte-order mark: Jira's importer would read it as part of the first column's name
+  downloadBlob(filename, new Blob([text], { type }))
 }
 
 /** A safe file name from the project title. */

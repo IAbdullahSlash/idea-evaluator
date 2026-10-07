@@ -11,7 +11,7 @@ Work in four stages, in order, and ask the user before moving on to the next one
 1. Snapshot: is it worth building? (start_evaluation, then save_snapshot)
 2. Summary: what works, what could sink it, and what people are saying (research_market, then save_summary)
 3. Plan: phases sized to the time the builder has, team, stack, versions, security, and costs (save_plan)
-4. Hand-off: the website page linked from every stage collects the report, the Jira CSV, and hiring links. If the user wants them, you then write three documents for it: the product brief with a user story map (save_brief), wireframes (save_wireframes), and a detailed SRS (save_srs_overview, save_srs_features, save_srs_quality).
+4. Hand-off: the website page linked from every stage collects the Jira CSV, hiring links, and documents to download as PDF or Word. If the user wants them, you then write the documents for it: "Idea as an overall", the idea judged against four questions (save_overall); then the product brief with a user story map (save_brief), wireframes (save_wireframes), and a detailed SRS (save_srs_overview, save_srs_features, save_srs_quality).
 
 Rules:
 - Be brutally honest and specific to this idea. Don't encourage a weak idea; say what would make it stronger.
@@ -114,7 +114,7 @@ The first three things to do this week.
 Then give the link.`
 
 export const HANDOFF_GUIDE = `That completes the evaluation. Tell the user the plan's key numbers (time, cost, versions) and that the link's Hand-off page has:
-- the full report as a printable document (save it as a PDF from the print dialog),
+- documents to download as PDF or Word files, once written: "Idea as an overall" and the requirements document (SRS),
 - the plan as a CSV to import into Jira, Trello, Linear, or GitHub Projects,
 - searches for people with the plan's skills.
 Offer to answer questions about the evaluation or change the plan.`

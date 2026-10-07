@@ -7,12 +7,15 @@ import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { validateIdea } from "@/lib/validation"
-import { buildReport } from "@/lib/documents/report"
+import { buildOverall } from "@/lib/documents/overall"
 import { buildSrsDocument } from "@/lib/documents/srs"
-import { downloadText, fileSlug, hireLinks, jiraCsv, openHtml } from "@/lib/handoff"
+import type { DocumentSpec } from "@/lib/documents/template"
+import type { ExportFormat } from "@/lib/documents/export"
+import { downloadText, fileSlug, hireLinks, jiraCsv } from "@/lib/handoff"
 import { numberRequirements, srsFeaturesSchema, srsOverviewSchema, srsQualitySchema, srsSchema, tidySrs, type Srs } from "@/lib/schemas/srs"
 import { briefSchema, numberStories, type Brief } from "@/lib/schemas/brief"
 import { wireframesSchema, type Wireframes } from "@/lib/schemas/wireframes"
+import { overallSchema, QUESTIONS, type Answer, type Overall } from "@/lib/schemas/overall"
 import { planSchema } from "@/lib/schemas/plan"
 import { splitPlan } from "@/lib/evaluation/plan"
 import { CONTEXT_QUESTIONS, missingContext } from "@/lib/schemas/context"
@@ -26,7 +29,6 @@ import {
   MoreHorizontal,
   Download,
   Edit3,
-  FileText,
   Link as LinkIcon,
   Loader2,
   RefreshCw,
@@ -236,8 +238,9 @@ interface GitHubRepo {
 }
 
 // The documents the Hand-off page writes on request, and where
-type HandOffDoc = "brief" | "wireframes" | "srs"
+type HandOffDoc = "overall" | "brief" | "wireframes" | "srs"
 const HAND_OFF_DOCS = {
+  overall: { url: "/api/overall", name: "overall view of the idea" },
   brief: { url: "/api/brief", name: "product vision and story map" },
   wireframes: { url: "/api/wireframes", name: "wireframes" },
   srs: { url: "/api/srs", name: "requirements document" },
@@ -305,10 +308,12 @@ function normalizeStages(input: unknown): Record<string, any> {
   }
   // Older versions saved other hand-off data; keep only documents that still match their schema
   if (stages.stage5) {
+    const overall = overallSchema.safeParse(stages.stage5.overall)
     const brief = briefSchema.safeParse(stages.stage5.brief)
     const wireframes = wireframesSchema.safeParse(stages.stage5.wireframes)
     const srs = srsSchema.safeParse(stages.stage5.srs)
     stages.stage5 = {
+      ...(overall.success ? { overall: overall.data } : {}),
       ...(brief.success ? { brief: brief.data } : {}),
       ...(wireframes.success ? { wireframes: wireframes.data } : {}),
       ...(srs.success ? { srs: srs.data } : {}),
@@ -351,7 +356,9 @@ export default function AnalysisPage() {
     }
     // Hand-off: everything else on the page is built from the earlier stages
     stage5?: {
-      // The Report's product vision and story map, and the key screens drawn from its stories
+      // The idea judged against the four questions
+      overall?: Overall
+      // The product vision and story map, and the key screens drawn from its stories; the SRS traces to both
       brief?: Brief
       wireframes?: Wireframes
       srs?: Srs
@@ -377,8 +384,9 @@ export default function AnalysisPage() {
   // The Hand-off document being written, and why the last attempt at each failed
   const [writing, setWriting] = useState<HandOffDoc | null>(null)
   const [writeErrors, setWriteErrors] = useState<Partial<Record<HandOffDoc, string>>>({})
-  // A document saved as a file because the browser blocked its new tab
-  const [savedInstead, setSavedInstead] = useState<"report" | "srs" | null>(null)
+  // The document file being made for download ("overall-pdf", "srs-docx", …), and why the last one failed
+  const [exporting, setExporting] = useState<string | null>(null)
+  const [exportError, setExportError] = useState<{ doc: string; message: string } | null>(null)
   // Remaking the plan from the Plan page, and why it failed
   const [remakingPlan, setRemakingPlan] = useState(false)
   const [planError, setPlanError] = useState<string | null>(null)
@@ -869,15 +877,21 @@ export default function AnalysisPage() {
       // The story map's stories and the screens, so later documents can cite them (US-1, "Dashboard", …)
       stories,
       screens,
+      // What people are saying online, for the overall view's "who cares"
+      takeaway: stageData.stage2?.discussions?.takeaway,
       plan: stageData.stage3 && stageData.stage4 && {
         scopeCuts: stageData.stage3.scopeCuts,
+        timelineFit: stageData.stage3.timelineFit,
+        projectMilestones: stageData.stage3.projectMilestones,
+        teamRoles: stageData.stage3.teamRoles,
         versionMilestones: stageData.stage4.versionMilestones,
         techRoadmap: stageData.stage4.techRoadmap,
         securityConsiderations: stageData.stage4.securityConsiderations,
+        costEstimates: stageData.stage4.costEstimates,
       },
     }
     try {
-      let value: Brief | Wireframes | Srs
+      let value: Overall | Brief | Wireframes | Srs
       if (doc === "srs") {
         // All three parts at once; a part that fails on the server or times out is asked for once more.
         // Parts that did finish are cached on the server, so the retry only redoes the missing one.
@@ -897,7 +911,7 @@ export default function AnalysisPage() {
         ]
         value = tidySrs({ overview, features: features.features, quality }, stories.map((st) => st.id), screens.map((sc) => sc.name))
       } else {
-        const schema = doc === "brief" ? briefSchema : wireframesSchema
+        const schema = doc === "overall" ? overallSchema : doc === "brief" ? briefSchema : wireframesSchema
         const parsed = schema.safeParse(await postJson(url, body, failed))
         if (!parsed.success) throw new RequestError(`The ${name} came back incomplete. Please try again.`, false)
         value = parsed.data
@@ -2111,13 +2125,13 @@ export default function AnalysisPage() {
             <ContinueButton
               to={AnalysisStage.HAND_OFF}
               label="Continue to hand-off"
-              hint="Next: export the report and find help."
+              hint="Next: the idea as a whole, the documents, and finding help."
             />
           }
         >
           <SheetHeading>Take it with you</SheetHeading>
           <p className="max-w-[60ch] text-[0.9375rem] leading-relaxed text-ink-soft">
-            The hand-off page collects the report and links to find people who can help build it.
+            The hand-off page judges the idea as a whole, writes the requirements up as documents to download, and links to people who can help build it.
           </p>
         </SheetRow>
       </Sheet>
@@ -2127,10 +2141,10 @@ export default function AnalysisPage() {
   // 🎨 STAGE 4: HAND-OFF
   const projectTitle = () => analysis?.projectTitle || analysis?.shortTitle || "Project idea"
 
-  // Every page in one printable document, opened in a new tab
-  const openReport = () => {
-    if (!analysis) return
-    const html = buildReport({
+  // "Idea as an overall" as a document, from the overall answers and what the earlier pages found
+  const overallDocument = (overall: Overall): DocumentSpec =>
+    buildOverall({
+      overall,
       idea: formData.idea,
       context: CONTEXT_QUESTIONS.map((q) => ({
         label: q.label,
@@ -2141,27 +2155,57 @@ export default function AnalysisPage() {
       discussions: stageData.stage2?.discussions,
       githubRepos: stageData.stage2?.githubRepos,
       existingSolutions: stageData.stage2?.existingSolutions,
-      quickWins: stageData.stage2?.quickWins,
       plan: stageData.stage3 && stageData.stage4 ? { stage3: stageData.stage3, stage4: stageData.stage4 } : undefined,
+    })
+
+  const srsDocument = (srs: Srs): DocumentSpec =>
+    buildSrsDocument(srs, projectTitle(), {
       brief: stageData.stage5?.brief,
       wireframes: stageData.stage5?.wireframes,
+      versions: stageData.stage4?.versionMilestones.map((v) => ({ version: v.version, timeline: v.timeline })) ?? [],
     })
-    setSavedInstead(openHtml(html, `${fileSlug(projectTitle())}-report.html`) ? null : "report")
+
+  // Build a document as a PDF or Word file in the browser and download it
+  const exportDocument = async (doc: "overall" | "srs", format: ExportFormat, spec: () => DocumentSpec) => {
+    const key = `${doc}-${format}`
+    setExporting(key)
+    setExportError(null)
+    try {
+      const { downloadDocument } = await import("@/lib/documents/export")
+      await downloadDocument(spec(), format, `${fileSlug(projectTitle())}-${doc === "overall" ? "idea-overall" : "srs"}`)
+    } catch (error) {
+      console.error("[export] Failed:", error)
+      setExportError({ doc, message: `The ${format === "pdf" ? "PDF" : "Word file"} couldn't be made. Please try again.` })
+    } finally {
+      setExporting(null)
+    }
   }
 
-  const openSrs = (srs: Srs) => {
-    const brief = stageData.stage5?.brief
-    const html = buildSrsDocument(srs, projectTitle(), {
-      wireframes: stageData.stage5?.wireframes,
-      stories: brief ? numberStories(brief) : [],
-    })
-    setSavedInstead(openHtml(html, `${fileSlug(projectTitle())}-srs.html`) ? null : "srs")
-  }
+  // "Download PDF" and "Download Word", with progress and an error line
+  const DownloadButtons = ({ doc, spec }: { doc: "overall" | "srs"; spec: () => DocumentSpec }) => (
+    <>
+      {(["pdf", "docx"] as const).map((format) => {
+        const busy = exporting === `${doc}-${format}`
+        return (
+          <Button
+            key={format}
+            size={format === "pdf" ? "lg" : "default"}
+            variant={format === "pdf" ? "default" : "outline"}
+            className={cn("w-full justify-between", format === "pdf" && "h-11 px-4")}
+            disabled={exporting !== null}
+            onClick={() => exportDocument(doc, format, spec)}
+          >
+            {busy ? "Preparing…" : format === "pdf" ? "Download PDF" : "Download Word (.docx)"}
+            {busy ? <Loader2 className="animate-spin" /> : <Download />}
+          </Button>
+        )
+      })}
+      {exportError?.doc === doc ? <p role="alert" className="text-meta font-medium text-marker">{exportError.message}</p> : null}
+    </>
+  )
 
-  const SavedInsteadNote = ({ doc }: { doc: "report" | "srs" }) =>
-    savedInstead === doc ? (
-      <p role="status" className="text-meta text-ink-soft">The browser blocked the new tab, so it was saved as a file instead. Open the file to print it.</p>
-    ) : null
+  // Yes in ink, Partly in soft ink, No in the marker's red, as an examiner would mark it
+  const answerTone = (answer: Answer) => (answer === "Yes" ? "text-ink" : answer === "No" ? "text-marker" : "text-ink-soft")
 
   // "Write …" / "Write it again", with its progress and error lines
   const WriteButton = ({ doc, label, again = "Write it again" }: { doc: HandOffDoc; label: string; again?: string }) => {
@@ -2189,6 +2233,7 @@ export default function AnalysisPage() {
 
   const renderDeepResources = () => {
     if (!analysis || !stageData.stage5) return null
+    const overall = stageData.stage5.overall
     const srs = stageData.stage5.srs
     const brief = stageData.stage5.brief
     const wireframes = stageData.stage5.wireframes
@@ -2198,41 +2243,67 @@ export default function AnalysisPage() {
     const hiring = hireLinks(stageData.stage3?.teamRoles ?? [])
     const requirements = srs ? numberRequirements(srs) : []
     const nfrCount = srs ? [srs.quality.performance, srs.quality.safety, srs.quality.security, srs.quality.quality, srs.quality.businessRules].reduce((n, l) => n + l.length, 0) : 0
-    // Stories no requirement traces to, the same check as the SRS's Appendix A
+    // Stories no requirement traces to, the same check as the SRS's Appendix B
     const traced = new Set(requirements.flatMap((r) => r.stories))
     const untraced = stories.filter((st) => !traced.has(st.id))
 
     return (
       <Sheet>
-        <SheetRow marginFirstOnMobile margin={<MarginNote mark={<Tick />} title="All four pages marked">Take the report to your supervisor or team, and the plan into your tracker.</MarginNote>}>
+        <SheetRow marginFirstOnMobile margin={<MarginNote mark={<Tick />} title="All four pages marked">Take the overall view to your supervisor or team, the SRS to whoever builds it, and the plan into your tracker.</MarginNote>}>
           <h1 className="text-[1.5rem] font-semibold tracking-[-0.02em] text-ink sm:text-[1.75rem]">Take it further</h1>
-          <p className="mt-2 max-w-[60ch] text-[0.9375rem] text-ink-soft">The whole evaluation as a report, the requirements written up, and the plan ready to track.</p>
+          <p className="mt-2 max-w-[60ch] text-[0.9375rem] text-ink-soft">The idea judged as a whole, the requirements written up, and the plan ready to track.</p>
         </SheetRow>
 
         <SheetRow
           margin={
             <div className="space-y-2">
-              {brief ? (
-                <Button onClick={openReport} size="lg" className="h-11 w-full justify-between px-4">
-                  Open the report <FileText />
-                </Button>
-              ) : null}
-              <WriteButton doc="brief" label="Write the vision and story map" again="Rewrite the vision and map" />
-              {brief ? <WriteButton doc="wireframes" label="Draw the wireframes" again="Redraw the wireframes" /> : null}
-              {!brief ? (
-                <Button variant="ghost" onClick={openReport} className="w-full justify-between text-ink-soft">
-                  {viewing ? "Open the report" : "Open the report without them"} <FileText />
-                </Button>
-              ) : null}
-              <SavedInsteadNote doc="report" />
+              {overall ? <DownloadButtons doc="overall" spec={() => overallDocument(overall)} /> : null}
+              <WriteButton doc="overall" label="Answer the four questions" />
             </div>
           }
         >
-          <SheetHeading>The report</SheetHeading>
+          <SheetHeading>Idea as an overall</SheetHeading>
           <p className="max-w-[60ch] text-[0.9375rem] leading-relaxed text-ink-soft">
-            The evaluation and product brief as a paged document: executive summary, product vision, the marking and
-            market, a user story map, wireframes of the key screens, the plan with costs, and next steps, with a contents page. It opens in a new tab;
-            save it as a PDF from the print dialog.
+            The idea judged against the four questions every software project has to answer before it is worth building:
+            the problem and who cares, building and scaling it, maintaining it, and measuring success. Each answer draws on
+            the marking, the research, and the plan. Download it as a PDF or a Word document.
+          </p>
+          {overall ? (
+            <div className="mt-5 space-y-4">
+              <p className="max-w-[68ch] border-l-2 border-marker pl-3 text-[0.9375rem] leading-relaxed text-ink">{overall.verdict}</p>
+              <ol className="space-y-3">
+                {QUESTIONS.map((q, i) => (
+                  <li key={q.id} className="grid grid-cols-[1.5rem_1fr] gap-x-2">
+                    <span className="font-mono text-meta text-pencil tabular pt-0.5">{i + 1}</span>
+                    <div>
+                      <p className="font-medium text-ink">
+                        {q.question} <span className={cn("ml-1 font-semibold", answerTone(overall[q.id].answer))}>{overall[q.id].answer}</span>
+                      </p>
+                      <p className="mt-0.5 max-w-[68ch] text-sm leading-relaxed text-ink-soft">{overall[q.id].summary}</p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          ) : (
+            <p className="mt-3 max-w-[60ch] text-sm text-pencil">
+              {viewing ? "The overall view is written in the AI chat, after the plan." : "Answer the four questions to see the idea as a whole."}
+            </p>
+          )}
+        </SheetRow>
+
+        <SheetRow
+          margin={
+            <div className="space-y-2">
+              <WriteButton doc="brief" label="Write the vision and story map" again="Rewrite the vision and map" />
+              {brief ? <WriteButton doc="wireframes" label="Draw the wireframes" again="Redraw the wireframes" /> : null}
+            </div>
+          }
+        >
+          <SheetHeading>Vision, story map, and wireframes</SheetHeading>
+          <p className="max-w-[60ch] text-[0.9375rem] leading-relaxed text-ink-soft">
+            The product vision, a user story map sliced into the plan&apos;s versions, and wireframes of the key screens.
+            The requirements document traces every requirement back to them and prints them in full, so write these first.
           </p>
           {brief ? (
             <div className="mt-5 space-y-3">
@@ -2260,8 +2331,8 @@ export default function AnalysisPage() {
           ) : (
             <p className="mt-3 max-w-[60ch] text-sm text-pencil">
               {viewing
-                ? "The product vision, story map, and wireframes are written in the AI chat; until then the report covers the evaluation and the plan."
-                : "Write the product vision and the user story map first, so the report includes them."}
+                ? "The product vision, story map, and wireframes are written in the AI chat, before the requirements document."
+                : "Write the product vision and the user story map first, then draw the wireframes."}
             </p>
           )}
         </SheetRow>
@@ -2269,13 +2340,8 @@ export default function AnalysisPage() {
         <SheetRow
           margin={
             <div className="space-y-2">
-              {srs ? (
-                <Button size="lg" className="h-11 w-full justify-between px-4" onClick={() => openSrs(srs)}>
-                  Open the SRS <FileText />
-                </Button>
-              ) : null}
+              {srs ? <DownloadButtons doc="srs" spec={() => srsDocument(srs)} /> : null}
               <WriteButton doc="srs" label="Write the SRS" />
-              <SavedInsteadNote doc="srs" />
             </div>
           }
         >
@@ -2283,8 +2349,8 @@ export default function AnalysisPage() {
           <p className="max-w-[60ch] text-[0.9375rem] leading-relaxed text-ink-soft">
             A detailed software requirements specification on the IEEE 830 outline, written from this evaluation, the plan,
             the story map, and the wireframes: users and interfaces, features with numbered requirements and acceptance
-            criteria, measurable quality requirements, the data model, and a traceability table back to the user stories
-            and screens. It opens as a paged document; save it as a PDF from the print dialog.
+            criteria, measurable quality requirements, the data model, the user story map, and a traceability table back to
+            the user stories and screens. Download it as a PDF or a Word document.
           </p>
           {!srs && (!brief || !wireframes) ? (
             <p className="mt-3 max-w-[60ch] text-sm text-pencil">
@@ -2362,12 +2428,12 @@ export default function AnalysisPage() {
           </SheetRow>
         ) : null}
 
-        <SheetRow margin={<MarginNote title="Not available yet">It needs saved reports and accounts, which are on the roadmap.</MarginNote>}>
+        <SheetRow margin={<MarginNote title="Not available yet">It needs saved evaluations and accounts, which are on the roadmap.</MarginNote>}>
           <SheetHeading>Coming later</SheetHeading>
           <p className="flex items-start gap-3 text-pencil">
             <LinkIcon className="mt-0.5 size-4 shrink-0" aria-hidden />
             <span>
-              <span className="block font-medium text-ink-soft">Shareable report link</span>
+              <span className="block font-medium text-ink-soft">Shareable link</span>
               <span className="text-sm">A permanent link to this evaluation, to send instead of a file.</span>
             </span>
           </p>

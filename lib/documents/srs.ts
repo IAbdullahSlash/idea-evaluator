@@ -1,30 +1,36 @@
 import { numberRequirements, type Srs } from '@/lib/schemas/srs'
 import type { Wireframes } from '@/lib/schemas/wireframes'
-import type { MappedStory } from '@/lib/schemas/brief'
+import { numberStories, type Brief } from '@/lib/schemas/brief'
 import { screensTable, screenSection } from '@/lib/documents/screens'
-import { bullets, esc, keep, para, renderDocument, table, type DocSection } from '@/lib/documents/template'
+import { storyMapSections, visionStatement, type PlannedVersion } from '@/lib/documents/storymap'
+import { bullets, esc, keep, para, table, type DocSection, type DocumentSpec } from '@/lib/documents/template'
 
 /**
  * The SRS on the IEEE 830 / ISO/IEC/IEEE 29148 outline:
  *
  *   1 Introduction · 2 Overall description · 3 External interfaces
  *   4 System features · 5 Non-functional requirements · 6 Data requirements
- *   Appendix A: traceability · Appendix B: open questions
+ *   Appendix A: user story map · Appendix B: traceability · Appendix C: open questions
  *
  * Every section always appears. Functional requirements are numbered FR-n and
- * non-functional ones NFR-n here, and Appendix A traces each FR to the user
+ * non-functional ones NFR-n here, and Appendix B traces each FR to the user
  * stories and screens it cites, then lists any story no requirement covers.
+ * The product vision opens section 2, and the story map the requirements
+ * trace to is printed in full in Appendix A.
  */
 
 const TBD = 'To be determined.'
 
 export interface SrsExtras {
+  /** The product vision and story map, printed in section 2.1 and Appendix A and traced to in Appendix B. */
+  brief?: Brief
   wireframes?: Wireframes
-  /** The story map's stories, for the traceability appendix. */
-  stories?: MappedStory[]
+  /** The plan's versions, which are the story map's releases. */
+  versions?: PlannedVersion[]
 }
 
-export function buildSrsDocument(srs: Srs, projectTitle: string, { wireframes, stories = [] }: SrsExtras = {}): string {
+export function buildSrsDocument(srs: Srs, projectTitle: string, { brief, wireframes, versions = [] }: SrsExtras = {}): DocumentSpec {
+  const stories = brief ? numberStories(brief) : []
   const today = new Date().toISOString().slice(0, 10)
   const o = srs.overview
   const q = srs.quality
@@ -64,7 +70,7 @@ export function buildSrsDocument(srs: Srs, projectTitle: string, { wireframes, s
     }
   })
 
-  // Appendix A: each requirement's stories and screens, then what nothing covers
+  // Appendix B: each requirement's stories and screens, then what nothing covers
   const covered = new Set(frs.flatMap((r) => r.stories))
   const uncovered = stories.filter((s) => !covered.has(s.id))
   const traceability =
@@ -81,6 +87,8 @@ export function buildSrsDocument(srs: Srs, projectTitle: string, { wireframes, s
           )
         : para(`Every one of the ${stories.length} user stories is covered by at least one requirement.`)
       : para('There is no user story map to trace to. Write the vision and story map on the Hand-off page, then write this document again.'))
+
+  const NO_MAP = 'There is no user story map yet. Write the vision and story map on the Hand-off page, then write this document again.'
 
   const sections: DocSection[] = [
     {
@@ -101,13 +109,13 @@ export function buildSrsDocument(srs: Srs, projectTitle: string, { wireframes, s
           body: bullets([
             'IEEE Std 830-1998, Recommended Practice for Software Requirements Specifications.',
             'ISO/IEC/IEEE 29148:2018, Systems and software engineering — Life cycle processes — Requirements engineering.',
-            `Evaluation report for ${projectTitle}, from The Idea Evaluator: the product vision, user story map (US-n), and wireframes this document traces to.`,
+            `The evaluation of ${projectTitle} by The Idea Evaluator, and its product vision, user story map (US-n, Appendix A), and wireframes, which this document traces to.`,
           ]),
         },
         {
           title: 'Overview',
           body: para(
-            'Section 2 describes the product, its users, and its environment. Section 3 covers its interfaces, including the screens. Section 4 groups the functional requirements (FR-n) by feature, section 5 sets the non-functional requirements (NFR-n), and section 6 describes the data. Appendix A traces every requirement to the user stories and screens, and appendix B lists open questions.'
+            'Section 2 describes the product, its users, and its environment. Section 3 covers its interfaces, including the screens. Section 4 groups the functional requirements (FR-n) by feature, section 5 sets the non-functional requirements (NFR-n), and section 6 describes the data. Appendix A is the user story map, appendix B traces every requirement to its user stories and screens, and appendix C lists open questions.'
           ),
         },
       ],
@@ -115,7 +123,7 @@ export function buildSrsDocument(srs: Srs, projectTitle: string, { wireframes, s
     {
       title: 'Overall description',
       children: [
-        { title: 'Product perspective', body: para(o.productPerspective) },
+        { title: 'Product perspective', body: (brief ? visionStatement(brief) : '') + para(o.productPerspective) },
         { title: 'Product functions', body: bullets(o.productFunctions) },
         {
           title: 'User classes and characteristics',
@@ -192,6 +200,11 @@ export function buildSrsDocument(srs: Srs, projectTitle: string, { wireframes, s
         { title: 'Data retention', body: bullets(q.retention), empty: TBD },
       ],
     },
+    {
+      title: 'User story map',
+      appendix: true,
+      children: brief ? storyMapSections(brief, versions) : [{ title: 'The map', empty: NO_MAP }],
+    },
     { title: 'Traceability', appendix: true, body: traceability },
     {
       title: 'Open questions',
@@ -200,7 +213,7 @@ export function buildSrsDocument(srs: Srs, projectTitle: string, { wireframes, s
     },
   ]
 
-  return renderDocument({
+  return {
     kind: 'Software Requirements Specification',
     title: projectTitle,
     summary: o.inScope.slice(0, 3).join(' · '),
@@ -212,5 +225,5 @@ export function buildSrsDocument(srs: Srs, projectTitle: string, { wireframes, s
     revisions: [{ version: '0.1', date: today, description: 'First draft, written from the evaluation, the plan, the story map, and the wireframes. Review before use.' }],
     sections,
     colophon: 'Drafted by The Idea Evaluator from the evaluation. Review and edit before use.',
-  })
+  }
 }

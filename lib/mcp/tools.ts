@@ -12,7 +12,7 @@ import { availableWeeks, formatMoney, formatWeeks, sumCosts, totalWeeks } from '
 import { newEvaluationId, type StoredEvaluation } from '@/lib/store'
 import { clip, fail, isFail, load, ok, store } from '@/lib/mcp/helpers'
 import { registerDocumentTools } from '@/lib/mcp/document-tools'
-import { BRIEF_GUIDE, DOCUMENTS_OFFER } from '@/lib/mcp/document-guide'
+import { DOCUMENTS_OFFER, OVERALL_GUIDE } from '@/lib/mcp/document-guide'
 import { planInput, researchInput, snapshotInput, startInput, summaryInput } from '@/lib/mcp/contracts'
 import {
   HANDOFF_GUIDE,
@@ -257,7 +257,7 @@ export function registerTools(server: McpServer, origin: string): void {
           (needed !== null ? `Phases add up to ${formatWeeks(needed)}${has !== null ? ` of the ${evaluation.formData.timeline} available` : ''}. ` : 'Some phase durations could not be read, so the weeks were not added up; use "N days" or "N weeks". ') +
           (total ? `Running cost at the start: ${formatMoney(total)}. ` : 'Some costs could not be read, so no total was added up; use "$N/month", "$N/year", or "$N once". ') +
           (overrun ? `\nThe phases don't fit the time available, so the plan is marked "More than the time you have". Consider cutting scope (list the cut features in scopeCuts) and calling save_plan again.` : '') +
-          `\nLink: ${link(evaluationId)}\n\n${PLAN_WRITEUP}\n\n${HANDOFF_GUIDE}\n\n${DOCUMENTS_OFFER}\n\nIf they want them: ${BRIEF_GUIDE}`
+          `\nLink: ${link(evaluationId)}\n\n${PLAN_WRITEUP}\n\n${HANDOFF_GUIDE}\n\n${DOCUMENTS_OFFER}\n\nIf they want them: ${OVERALL_GUIDE}`
       )
     }
   )

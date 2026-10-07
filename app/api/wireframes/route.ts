@@ -5,7 +5,7 @@ import { tidyWireframes, wireframesSchema } from "@/lib/schemas/wireframes"
 
 /**
  * POST { idea, …context, snapshot, summary, plan, stories } → wireframes:
- * the key screens, each a stack of standard parts the Report draws as
+ * the key screens, each a stack of standard parts the SRS draws as
  * low-fidelity grey boxes. Screens cite the story map's IDs (US-n).
  */
 

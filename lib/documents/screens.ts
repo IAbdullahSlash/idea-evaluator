@@ -3,9 +3,8 @@ import { renderWireframe } from '@/lib/documents/wireframe'
 import { bullets, esc, para, table, type DocSection } from '@/lib/documents/template'
 
 /**
- * The wireframes as document sections, shared by the Report (section 5) and
- * the SRS (section 3.1): a table of screens and how they connect, then one
- * subsection per screen with its sketch.
+ * The wireframes as document sections, for the SRS (section 3.1): a table of
+ * screens and how they connect, then one subsection per screen with its sketch.
  */
 
 export function screensTable(w: Wireframes): string {

@@ -14,7 +14,7 @@ The evaluation runs in four stages. Each one opens only when you choose to conti
 1. **Snapshot** — A mark out of 10, worked out from six criteria (a real problem, worth solving, not already done, something new, within reach, someone wants it), each with its own mark and reason. Also a recommendation (Build / Narrow it down / Rethink / Drop), odds of success, an honest reality check, who it is for, and questions to ask yourself. If the idea is too vague to mark, it asks up to three follow-up questions first.
 2. **Summary** — Pros and cons, risks with severity, what people are discussing (Hacker News and Stack Exchange) and recent news coverage (Google News), quick wins, existing solutions, similar projects on GitHub, and an executive summary.
 3. **Plan** — Whether the scope fits your time, phases sized to it, scope cuts, the team, the stack, versions, security, and costs added up.
-4. **Hand-off** — Two paged documents to save as PDF: the Report (evaluation, product vision, user story map, wireframes, plan) and a detailed SRS (IEEE 830 outline, with a data model and traceability to the user stories and screens); the plan as a Jira CSV; and searches for people with the plan's skills.
+4. **Hand-off** — Two documents to download as PDF or Word: Idea as an overall (the idea judged against four questions: the problem and who cares, building and scaling it, maintaining it, and measuring success) and a detailed SRS (IEEE 830 outline, with the product vision, user story map, wireframes, a data model, and traceability to the user stories and screens); the plan as a Jira CSV; and searches for people with the plan's skills.
 
 ## Use It in Your Own AI (MCP)
 
@@ -33,6 +33,7 @@ Their own AI does the thinking; the server supplies the method, live research, a
 | `research_market` | Searches Hacker News, Stack Exchange, Google News, and GitHub |
 | `save_summary` | Keeps only discussions and news from the research, checks solution links |
 | `save_plan` | Adds up the weeks and costs, and checks the phases fit the time available |
+| `save_overall` | Checks the four answers (Yes, Partly, or No) and their reasoning |
 | `save_brief`, `save_wireframes` | Numbers the stories into the plan's versions; keeps only real story ids |
 | `save_srs_overview`, `save_srs_features`, `save_srs_quality` | Assembles the SRS, numbers requirements, and checks every story is traced |
 | `get_evaluation` | Which stages are saved, and the link |
@@ -48,6 +49,7 @@ Browser (Next.js 14 App Router)
         │
         ├─ POST /api/analyze      Snapshot and Summary (validated against a schema)
         ├─ POST /api/stage-data   Plan (validated against a schema)
+        ├─ POST /api/overall      Idea as an overall: the four questions (validated against a schema)
         ├─ POST /api/brief        Product vision and user story map (validated against a schema)
         ├─ POST /api/wireframes   Key screens as low-fidelity wireframes (validated against a schema)
         ├─ POST /api/srs          Detailed requirements document, written in three parts at once (each validated)
@@ -81,6 +83,7 @@ Every Gemini model is tried with every configured key before moving on. A key th
 | News | Google News RSS search (no key needed; Google offers it for non-commercial use) |
 | Repos | GitHub search API |
 | State | localStorage on the website (every stage survives a refresh); Upstash Redis for evaluations made through MCP |
+| Documents | `pdfmake` (PDF) and `docx` (Word), built in the browser when downloaded |
 | MCP | `mcp-handler` with the MCP SDK v2, rate limits with `@upstash/ratelimit` |
 
 ## Getting Started
@@ -134,6 +137,7 @@ app/
 └── api/
     ├── analyze/             # Snapshot and Summary
     ├── stage-data/          # Plan
+    ├── overall/             # Idea as an overall
     ├── brief/               # Product vision and user story map
     ├── wireframes/          # Key screens, described as standard parts
     ├── srs/                 # Requirements document
@@ -156,8 +160,8 @@ lib/
 ├── store.ts                 # Saved evaluations in Upstash Redis
 ├── rate-limit.ts            # Per-IP limits on the MCP endpoint
 ├── market.ts, github.ts     # Market research and similar-project search, shared by both
-├── schemas/                 # Schemas: snapshot, plan, product brief, SRS, and the questions asked with the idea
-├── documents/               # Document template (fixed outline, Paged.js), the Report and SRS layouts, and the wireframe drawing
+├── schemas/                 # Schemas: snapshot, plan, overall answers, product brief, SRS, and the questions asked with the idea
+├── documents/               # Document template (fixed outline), the Idea-as-an-overall and SRS layouts, the wireframe drawing, and the PDF and Word exporters
 ├── evaluation-context.ts    # What earlier pages learned, as prompt text for the Plan and SRS
 ├── plan-math.ts             # Phase durations and costs added up
 ├── handoff.ts               # Jira CSV, hiring searches, downloads
