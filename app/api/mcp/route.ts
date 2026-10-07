@@ -12,7 +12,11 @@ import { checkMcpRequest } from "@/lib/rate-limit"
 
 export const maxDuration = 60
 
-// Links in tool replies point back at the site the client connected to (production, a preview, or localhost)
+// Links in tool replies always point at the public production site on Vercel, even when the
+// client connected through a preview address (previews can be private); locally, at localhost
+const productionHost = process.env.VERCEL_PROJECT_PRODUCTION_URL
+const linkOrigin = (request: Request) => (productionHost ? `https://${productionHost}` : new URL(request.url).origin)
+
 const handlers = new Map<string, (request: Request) => Promise<Response>>()
 function handlerFor(origin: string) {
   let handler = handlers.get(origin)
@@ -30,7 +34,7 @@ function handlerFor(origin: string) {
 async function handle(request: Request) {
   const refused = await checkMcpRequest(request)
   if (refused) return refused
-  return handlerFor(new URL(request.url).origin)(request)
+  return handlerFor(linkOrigin(request))(request)
 }
 
 export { handle as GET, handle as POST, handle as DELETE }
