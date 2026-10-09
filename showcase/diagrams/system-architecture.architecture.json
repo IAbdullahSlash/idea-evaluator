@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "The Idea Evaluator: system architecture",
+    "output": "system-architecture.html",
+    "quality_profile": "showcase",
+    "viewBox": [1280, 640],
+    "views": [
+      { "id": "website", "label": "On the website", "focus": ["person", "web", "api", "router", "models", "research", "sources"], "note": "The four stages in the browser, with the AI and research behind the API routes." },
+      { "id": "connector", "label": "In your own AI", "focus": ["ownai", "mcp", "research", "sources", "redis"], "note": "The MCP connector: your AI thinks; the server supplies method, research, checks and storage." }
+    ]
+  },
+  "components": [
+    { "id": "person", "type": "external", "label": "You", "sublabel": "in the browser", "pos": [40, 120], "size": [150, 64] },
+    { "id": "ownai", "type": "external", "label": "Your own AI", "sublabel": "Claude · ChatGPT · Gemini", "pos": [40, 480], "size": [170, 64] },
+    { "id": "web", "type": "frontend", "label": "Next.js pages", "sublabel": "/ · /analysis · /e/<id>", "brand": "next-js", "pos": [290, 120], "size": [170, 64] },
+    { "id": "api", "type": "backend", "label": "API routes", "sublabel": "analyze · stage-data · srs …", "pos": [540, 120], "size": [190, 64] },
+    { "id": "mcp", "type": "backend", "label": "MCP server", "sublabel": "/api/mcp · no AI", "tag": "rate-limited", "pos": [540, 480], "size": [190, 64] },
+    { "id": "router", "type": "backend", "label": "AI router", "sublabel": "lib/llm.ts · keys × models", "pos": [810, 120], "size": [190, 64] },
+    { "id": "models", "type": "cloud", "label": "Gemini → Groq", "sublabel": "quality · light tiers", "brand": "google-gemini", "pos": [1080, 120], "size": [170, 64] },
+    { "id": "research", "type": "backend", "label": "Live research", "sublabel": "lib/market.ts · github.ts", "pos": [810, 300], "size": [190, 64] },
+    { "id": "sources", "type": "external", "label": "Public sources", "sublabel": "HN · Stack Exchange · News · GitHub", "pos": [1060, 300], "size": [200, 64] },
+    { "id": "redis", "type": "database", "label": "Upstash Redis", "sublabel": "evaluations · 90 days", "brand": "redis", "pos": [810, 480], "size": [190, 64] }
+  ],
+  "connections": [
+    { "id": "person-web", "from": "person", "to": "web", "label": "HTTPS", "variant": "emphasis" },
+    { "id": "web-api", "from": "web", "to": "api", "label": "JSON", "variant": "emphasis" },
+    { "id": "api-router", "from": "api", "to": "router", "label": "prompt + schema", "variant": "emphasis" },
+    { "id": "router-models", "from": "router", "to": "models", "label": "fallback" },
+    { "id": "api-research", "from": "api", "to": "research", "label": "search", "fromSide": "bottom", "toSide": "left" },
+    { "id": "mcp-research", "from": "mcp", "to": "research", "label": "research_market", "fromSide": "top", "toSide": "left" },
+    { "id": "research-sources", "from": "research", "to": "sources", "label": "HTTP" },
+    { "id": "ownai-mcp", "from": "ownai", "to": "mcp", "label": "MCP tool calls", "variant": "emphasis" },
+    { "id": "mcp-redis", "from": "mcp", "to": "redis", "label": "save stage" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "On the website", "items": ["Each stage is a schema-checked JSON call", "Every stage is kept in localStorage", "PDF and Word are built in the browser"] },
+    { "dot": "violet", "title": "In your own AI", "items": ["Your AI writes; the server runs no AI", "Method, research, arithmetic and checks", "Saved stages open read-only at /e/<id>"] },
+    { "dot": "amber", "title": "AI router", "items": ["Every Gemini model on every key, then Groq", "Exhausted keys cool down; replies cached a day", "Keys stay on the server"] }
+  ]
+}

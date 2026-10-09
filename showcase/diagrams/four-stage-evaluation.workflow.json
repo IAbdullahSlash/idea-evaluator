@@ -1,0 +1,269 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "The four-stage evaluation on the website",
+    "output": "four-stage-evaluation.html",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "stages",
+        "label": "The four stages",
+        "focus": [
+          "idea",
+          "snapshot",
+          "summary",
+          "plan",
+          "handoff",
+          "exports"
+        ],
+        "note": "Each stage opens only when you choose to continue."
+      },
+      {
+        "id": "server",
+        "label": "Behind each stage",
+        "focus": [
+          "analyze",
+          "research",
+          "stagedata",
+          "docs"
+        ],
+        "note": "Every call is checked against a schema; research comes from live searches."
+      }
+    ]
+  },
+  "lanes": [
+    {
+      "id": "you",
+      "label": "You"
+    },
+    {
+      "id": "page",
+      "label": "Stages on /analysis"
+    },
+    {
+      "id": "server",
+      "label": "Behind the stage"
+    }
+  ],
+  "phases": [
+    {
+      "id": "p1",
+      "label": "1 · Snapshot",
+      "fromCol": 1,
+      "toCol": 1
+    },
+    {
+      "id": "p2",
+      "label": "2 · Summary",
+      "fromCol": 2,
+      "toCol": 2
+    },
+    {
+      "id": "p3",
+      "label": "3 · Plan",
+      "fromCol": 3,
+      "toCol": 3
+    },
+    {
+      "id": "p4",
+      "label": "4 · Hand-off",
+      "fromCol": 4,
+      "toCol": 5,
+      "variant": "emphasis"
+    }
+  ],
+  "mainPath": [
+    "idea",
+    "snapshot",
+    "summary",
+    "plan",
+    "handoff",
+    "exports"
+  ],
+  "nodes": [
+    {
+      "id": "idea",
+      "lane": "you",
+      "col": 0,
+      "type": "external",
+      "label": "Your idea",
+      "sublabel": "+ 4 context answers",
+      "width": 150
+    },
+    {
+      "id": "exports",
+      "lane": "you",
+      "col": 5,
+      "type": "external",
+      "label": "Take it away",
+      "sublabel": "PDF · Word · Linear",
+      "width": 150
+    },
+    {
+      "id": "snapshot",
+      "lane": "page",
+      "col": 1,
+      "type": "frontend",
+      "label": "Snapshot",
+      "sublabel": "mark /10, six criteria",
+      "width": 150
+    },
+    {
+      "id": "summary",
+      "lane": "page",
+      "col": 2,
+      "type": "frontend",
+      "label": "Summary",
+      "sublabel": "risks · market · repos",
+      "width": 150
+    },
+    {
+      "id": "plan",
+      "lane": "page",
+      "col": 3,
+      "type": "frontend",
+      "label": "Plan",
+      "sublabel": "phases fit your weeks",
+      "width": 150
+    },
+    {
+      "id": "handoff",
+      "lane": "page",
+      "col": 4,
+      "type": "frontend",
+      "label": "Hand-off",
+      "sublabel": "documents · roadmap",
+      "width": 150
+    },
+    {
+      "id": "analyze",
+      "lane": "server",
+      "col": 1,
+      "type": "backend",
+      "label": "/api/analyze",
+      "sublabel": "AI router: Gemini → Groq",
+      "width": 150
+    },
+    {
+      "id": "research",
+      "lane": "server",
+      "col": 2,
+      "type": "external",
+      "label": "Live research",
+      "sublabel": "HN · SE · News · GitHub",
+      "width": 150
+    },
+    {
+      "id": "stagedata",
+      "lane": "server",
+      "col": 3,
+      "type": "backend",
+      "label": "/api/stage-data",
+      "sublabel": "+ plan-math sums",
+      "width": 150
+    },
+    {
+      "id": "docs",
+      "lane": "server",
+      "col": 4,
+      "type": "security",
+      "label": "Document routes",
+      "sublabel": "zod check · retry once",
+      "width": 150
+    }
+  ],
+  "edges": [
+    {
+      "id": "idea-snapshot",
+      "from": "idea",
+      "to": "snapshot",
+      "label": "Mark my idea",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "snapshot-summary",
+      "from": "snapshot",
+      "to": "summary",
+      "label": "continue",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "summary-plan",
+      "from": "summary",
+      "to": "plan",
+      "label": "continue",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "plan-handoff",
+      "from": "plan",
+      "to": "handoff",
+      "label": "continue",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "handoff-exports",
+      "from": "handoff",
+      "to": "exports",
+      "label": "download",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "snapshot-analyze",
+      "from": "snapshot",
+      "to": "analyze",
+      "label": "POST",
+      "role": "branch"
+    },
+    {
+      "id": "summary-research",
+      "from": "summary",
+      "to": "research",
+      "label": "in parallel",
+      "role": "branch"
+    },
+    {
+      "id": "plan-stagedata",
+      "from": "plan",
+      "to": "stagedata",
+      "label": "POST",
+      "role": "branch"
+    },
+    {
+      "id": "handoff-docs",
+      "from": "handoff",
+      "to": "docs",
+      "label": "write",
+      "role": "branch"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Progressive",
+      "items": [
+        "A weak idea can stop at the Snapshot"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Honest",
+      "items": [
+        "Six explained marks; live sources"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Sized to you",
+      "items": [
+        "Weeks and costs added up in code"
+      ]
+    }
+  ]
+}

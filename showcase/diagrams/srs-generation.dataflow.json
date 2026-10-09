@@ -1,0 +1,278 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "How the Hand-off documents and the SRS are written",
+    "output": "srs-generation.html",
+    "quality_profile": "showcase",
+    "viewBox": [
+    1080,
+      560
+    ],
+    "views": [
+      {
+        "id": "story-spine",
+        "label": "Stories first",
+        "focus": [
+          "evaluation",
+          "brief",
+          "wireframes",
+          "srs"
+        ],
+        "note": "The story map numbers stories (US-1…); wireframes and the SRS cite those IDs."
+      },
+      {
+        "id": "assemble",
+        "label": "Assemble and trace",
+        "focus": [
+          "srs",
+          "trace",
+          "pdf",
+          "word"
+        ],
+        "note": "Three SRS parts are written at once, then numbered and traced to stories and screens."
+      },
+      {
+        "id": "roadmap",
+        "label": "Plan to Linear",
+        "focus": [
+          "evaluation",
+          "linear"
+        ],
+        "note": "The plan becomes a Linear roadmap: projects, milestones and issues."
+      }
+    ]
+  },
+  "stages": [
+    {
+      "label": "Evaluation"
+    },
+    {
+      "label": "Write"
+    },
+    {
+      "label": "SRS"
+    },
+    {
+      "label": "Assemble"
+    },
+    {
+      "label": "Deliver"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "evaluation",
+      "type": "database",
+      "label": "Evaluation",
+      "sublabel": "snapshot · summary · plan",
+      "stage": 0,
+      "row": 1,
+      "width": 150
+    },
+    {
+      "id": "overall",
+      "type": "backend",
+      "label": "Idea as an overall",
+      "sublabel": "four questions",
+      "stage": 1,
+      "row": 0,
+      "width": 150
+    },
+    {
+      "id": "brief",
+      "type": "backend",
+      "label": "Product brief",
+      "sublabel": "vision · story map",
+      "stage": 1,
+      "row": 1,
+      "tag": "US-1…",
+      "width": 150
+    },
+    {
+      "id": "wireframes",
+      "type": "backend",
+      "label": "Wireframes",
+      "sublabel": "key screens",
+      "stage": 1,
+      "row": 2,
+      "width": 150
+    },
+    {
+      "id": "srs",
+      "type": "backend",
+      "label": "/api/srs × 3",
+      "sublabel": "overview · features · quality",
+      "tag": "in parallel",
+      "stage": 2,
+      "row": 1,
+      "width": 150
+    },
+    {
+      "id": "trace",
+      "type": "security",
+      "label": "Number + trace",
+      "sublabel": "FR · NFR → US · screens",
+      "stage": 3,
+      "row": 1,
+      "width": 150
+    },
+    {
+      "id": "pdf",
+      "type": "frontend",
+      "label": "PDF",
+      "sublabel": "pdfmake",
+      "stage": 4,
+      "row": 0,
+      "width": 150
+    },
+    {
+      "id": "word",
+      "type": "frontend",
+      "label": "Word",
+      "sublabel": "docx",
+      "stage": 4,
+      "row": 1,
+      "width": 150
+    },
+    {
+      "id": "linear",
+      "type": "external",
+      "label": "Linear roadmap",
+      "sublabel": "projects · milestones",
+      "brand": "linear",
+      "stage": 4,
+      "row": 2,
+      "width": 150
+    }
+  ],
+  "flows": [
+    {
+      "id": "eval-overall",
+      "from": "evaluation",
+      "to": "overall",
+      "label": "verdict",
+      "fromSide": "top",
+      "toSide": "left",
+      "via": [
+        [
+          100,
+          157
+        ]
+      ]
+    },
+    {
+      "id": "eval-brief",
+      "from": "evaluation",
+      "to": "brief",
+      "label": "versions",
+      "variant": "emphasis"
+    },
+    {
+      "id": "brief-wireframes",
+      "from": "brief",
+      "to": "wireframes",
+      "label": "story IDs",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [
+        365,
+        328
+      ]
+    },
+    {
+      "id": "brief-srs",
+      "from": "brief",
+      "to": "srs",
+      "label": "stories",
+      "variant": "emphasis"
+    },
+    {
+      "id": "wireframes-srs",
+      "from": "wireframes",
+      "to": "srs",
+      "label": "screens",
+      "fromSide": "right",
+      "toSide": "bottom",
+      "via": [
+        [
+          530,
+          385
+        ]
+      ]
+    },
+    {
+      "id": "srs-trace",
+      "from": "srs",
+      "to": "trace",
+      "label": "3 parts",
+      "variant": "emphasis"
+    },
+    {
+      "id": "trace-pdf",
+      "from": "trace",
+      "to": "pdf",
+      "label": "download",
+      "fromSide": "top",
+      "toSide": "left",
+      "via": [
+        [
+          745,
+          157
+        ]
+      ]
+    },
+    {
+      "id": "trace-word",
+      "from": "trace",
+      "to": "word",
+      "label": "download",
+      "variant": "emphasis"
+    },
+    {
+      "id": "eval-linear",
+      "from": "evaluation",
+      "to": "linear",
+      "label": "plan → issues",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "bottom",
+      "via": [
+        [
+          100,
+          470
+        ],
+        [
+          960,
+          470
+        ]
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "IEEE 830 outline",
+      "items": [
+        "Fixed template, ISO/IEC/IEEE 29148 wording",
+        "\"The system shall …\" testable requirements"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Traceability",
+      "items": [
+        "Every requirement cites a user story",
+        "Uncovered stories are flagged before saving"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Out of the app",
+      "items": [
+        "PDF and Word built in the browser",
+        "Linear: a project per version, phases as milestones"
+      ]
+    }
+  ]
+}

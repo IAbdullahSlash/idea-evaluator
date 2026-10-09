@@ -1,0 +1,194 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "One evaluation through the MCP connector",
+    "output": "mcp-connector.html",
+    "quality_profile": "showcase",
+    "column_fit": "spread",
+    "viewBox": [
+      1080,
+      580
+    ],
+    "views": [
+      {
+        "id": "understand",
+        "label": "Understand and mark",
+        "focus": [
+          "you",
+          "ai",
+          "mcp",
+          "redis"
+        ],
+        "note": "Your AI asks what's missing, then the server starts the evaluation and computes the mark."
+      },
+      {
+        "id": "research",
+        "label": "Research for real",
+        "focus": [
+          "ai",
+          "mcp",
+          "sources"
+        ],
+        "note": "Search results come from live sources, quoted back to your AI as data."
+      },
+      {
+        "id": "documents",
+        "label": "Documents and the link",
+        "focus": [
+          "ai",
+          "mcp",
+          "redis",
+          "you"
+        ],
+        "note": "Plan and SRS are checked, numbered and traced; every stage opens at /e/<id>."
+      }
+    ]
+  },
+  "participants": [
+    {
+      "id": "you",
+      "type": "external",
+      "label": "You",
+      "sublabel": "in the chat"
+    },
+    {
+      "id": "ai",
+      "type": "external",
+      "label": "Your own AI",
+      "sublabel": "Claude · ChatGPT · Gemini"
+    },
+    {
+      "id": "mcp",
+      "type": "backend",
+      "label": "MCP server",
+      "sublabel": "/api/mcp · no AI"
+    },
+    {
+      "id": "sources",
+      "type": "external",
+      "label": "Live sources",
+      "sublabel": "HN · SE · News · GitHub"
+    },
+    {
+      "id": "redis",
+      "type": "database",
+      "label": "Upstash Redis",
+      "sublabel": "90 days",
+      "brand": "redis"
+    }
+  ],
+  "segments": [
+    {
+      "from": 166,
+      "to": 280,
+      "label": "Understand + mark"
+    },
+    {
+      "from": 284,
+      "to": 364,
+      "label": "Research"
+    },
+    {
+      "from": 368,
+      "to": 448,
+      "label": "Plan + SRS"
+    }
+  ],
+  "messages": [
+    {
+      "from": "you",
+      "to": "ai",
+      "y": 184,
+      "label": "Evaluate my idea…",
+      "variant": "emphasis"
+    },
+    {
+      "from": "ai",
+      "to": "you",
+      "y": 212,
+      "label": "asks what's missing",
+      "variant": "return"
+    },
+    {
+      "from": "ai",
+      "to": "mcp",
+      "y": 240,
+      "label": "start_evaluation · save_snapshot",
+      "variant": "emphasis"
+    },
+    {
+      "from": "mcp",
+      "to": "redis",
+      "y": 268,
+      "label": "save stage"
+    },
+    {
+      "from": "ai",
+      "to": "mcp",
+      "y": 296,
+      "label": "research_market",
+      "variant": "emphasis"
+    },
+    {
+      "from": "mcp",
+      "to": "sources",
+      "y": 324,
+      "label": "search"
+    },
+    {
+      "from": "sources",
+      "to": "mcp",
+      "y": 352,
+      "label": "discussions · news · repos",
+      "variant": "return"
+    },
+    {
+      "from": "ai",
+      "to": "mcp",
+      "y": 380,
+      "label": "save_summary · plan · srs_*",
+      "variant": "emphasis"
+    },
+    {
+      "from": "mcp",
+      "to": "ai",
+      "y": 408,
+      "label": "checked · numbered · traced",
+      "variant": "return"
+    },
+    {
+      "from": "ai",
+      "to": "you",
+      "y": 436,
+      "label": "write-up + /e/<id> link",
+      "variant": "return"
+    }
+  ],
+  "activations": [
+    {
+      "participant": "ai",
+      "from": 178,
+      "to": 442,
+      "type": "external"
+    },
+    {
+      "participant": "mcp",
+      "from": 234,
+      "to": 414,
+      "type": "backend"
+    },
+    {
+      "participant": "sources",
+      "from": 318,
+      "to": 358,
+      "type": "external"
+    },
+    {
+      "participant": "redis",
+      "from": 262,
+      "to": 274,
+      "type": "database"
+    }
+  ]
+}
