@@ -111,8 +111,8 @@ https://idea-evaluator-slash.vercel.app/api/mcp
 
 | App | Steps |
 |---|---|
-| **Claude** | Open **Settings → Connectors** on claude.ai or in Claude Desktop. Choose **Add custom connector**, name it **Idea Evaluator**, and paste the address. In a new chat, turn the connector on from the tools menu and write *"Evaluate my idea with the Idea Evaluator: …"* |
-| **ChatGPT** | Open **Settings → Apps & Connectors → Advanced settings** and turn on **Developer mode**. Create a connector named **Idea Evaluator**, paste the address, and choose **No authentication**. In a new chat, pick it from the **+** menu and ask it to evaluate your idea |
+| **Claude** | click **+** from the chat on claude.ai or in Claude Desktop. Choose **Connectors → Add connector → Add custom connector**, name it **Idea Evaluator**, and paste the address. In a new chat, turn the connector on from the tools menu and write *"Evaluate my idea with the Idea Evaluator: …"* |
+| **ChatGPT** | Open **Plugins → Add → Add custom MCP server**. Create a connector named **Idea Evaluator**, paste the address, and choose **No authentication**. In a new chat, type **@** and select from the menu and ask it to evaluate your idea |
 | **Gemini** | With the **Gemini CLI**, add the server to `~/.gemini/settings.json` (below), run `gemini`, and ask it to evaluate your idea |
 | **Others** | Apps that support MCP connectors, such as Cursor or VS Code, use the same address |
 
