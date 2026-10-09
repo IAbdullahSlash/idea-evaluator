@@ -26,21 +26,6 @@ https://github.com/user-attachments/assets/9f3f95a9-3afa-44b7-9d22-c82dcbc27014
 
 <sub><b>57 s · 1080p · with sound.</b> Video not playing? <a href="https://iabdullahslash.github.io/idea-evaluator/#video">Watch it on the showcase page</a> or <a href="showcase/media/mcp-connector-walkthrough.mp4">download mcp-connector-walkthrough.mp4</a>.</sub>
 
-The video follows one real evaluation (a bake planner for small bakeries) through the MCP connector, from a one-line idea to a traced SRS:
-
-| Time | Chapter | What you see |
-|---|---|---|
-| 0:00 | **The problem** | A generic chat answers "Great idea!" and lists twelve features. It doesn't understand, brainstorm, research or guide |
-| 0:08 | **The fix** | The Idea Evaluator does all four, as a connector in your own AI |
-| 0:12 | **1 · Connect** | Copy the address from the site, add a custom connector, turn it on in a new chat |
-| 0:22 | **2 · Understand** | Your AI asks what's missing before anything is marked |
-| 0:27 | **3 · Snapshot** | `save_snapshot`: 7/10 overall from six criteria, "Narrow it down" |
-| 0:31 | **4 · Research** | `research_market`: real discussions, news and GitHub projects; a dead link is dropped |
-| 0:36 | **5 · Plan** | `save_plan`: seven weeks of the one to two months available, $1 a month to run |
-| 0:41 | **6 · SRS** | The documents are written, every requirement traced to a user story, then downloaded as PDF or Word |
-
-Every tool reply in the video is the server's real reply from that evaluation; every page shown is a real capture of the site. The chat and settings windows are a plain "Your AI", not any one product.
-
 ---
 
 ## Table of contents
@@ -53,21 +38,15 @@ Every tool reply in the video is the server's real reply from that evaluation; e
    - [3.1 Connect it](#31-connect-it)
    - [3.2 Stage by stage](#32-stage-by-stage)
    - [3.3 The SRS and the other Hand-off documents](#33-the-srs-and-the-other-hand-off-documents)
-4. [On the website: the four stages](#4-on-the-website-the-four-stages)
-5. [How it works](#5-how-it-works)
+4. [How it works](#5-how-it-works)
    - [5.1 System architecture](#51-system-architecture)
    - [5.2 The four-stage workflow](#52-the-four-stage-workflow)
    - [5.3 One evaluation through the connector](#53-one-evaluation-through-the-connector)
    - [5.4 How the SRS is written](#54-how-the-srs-is-written)
-   - [5.5 The AI router](#55-the-ai-router)
-6. [MCP tools reference](#6-mcp-tools-reference)
-7. [Getting started](#7-getting-started)
-8. [Configuration](#8-configuration)
-9. [Project structure](#9-project-structure)
-10. [The showcase and GitHub Actions](#10-the-showcase-and-github-actions)
-11. [Key design decisions](#11-key-design-decisions)
-12. [Tech stack](#12-tech-stack)
-13. [License](#13-license)
+5. [MCP tools reference](#6-mcp-tools-reference)
+6. [Project structure](#9-project-structure)
+7. [Tech stack](#12-tech-stack)
+
 
 ---
 
@@ -212,23 +191,7 @@ Ask for the documents and your AI writes them part by part, with the server chec
 
 ---
 
-## 4. On the website: the four stages
-
-Without an AI of your own, the website runs the same four stages with its own AI router.
-
-1. **Write it down.** Describe the idea and answer four questions: what it is for (MVP, full product, prototype, API, mobile or web app), the domain, your experience, and the time you have. Press **Mark my idea**.
-2. **Snapshot.** `/api/analyze` asks the AI router for the marks and checks the reply against a schema. Too vague to mark? It asks up to three follow-up questions first.
-3. **Summary.** On **Continue**, three requests run in parallel: the full assessment (`/api/analyze`), discussions and news (`/api/discussions`), and similar repositories (`/api/github-repos`).
-4. **Plan.** `/api/stage-data` writes the plan; `lib/plan-math.ts` adds up phase weeks and costs and checks them against your time.
-5. **Hand-off.** The document routes (`/api/overall`, `/api/brief`, `/api/wireframes`, `/api/srs`) write each document from everything the earlier stages learned. PDF and Word files are built in the browser when you download them.
-
-Every stage is kept in `localStorage`, so a refresh doesn't lose anything.
-
----
-
 ## 5. How it works
-
-The diagrams below are made with [Archify](showcase/diagrams/) from typed JSON, checked for crossings, readability and layout, and published as interactive pages (pan, zoom, search, guided views, light and dark) on the [showcase site](https://iabdullahslash.github.io/idea-evaluator/). Click a picture to open its interactive version.
 
 ### 5.1 System architecture
 
@@ -262,17 +225,6 @@ Your AI asks before it marks, then calls the tools in order. The server saves ea
 
 Stories come first. The product brief numbers the user stories (US-1…) into the plan's versions; the wireframes cite those IDs. The SRS is then written in three parts at once (overview, features, quality), each in its own request so each gets its own function time; a part that fails is asked for once more, and parts that finished are cached. The page puts them together, numbers the requirements, and traces each one to its stories and screens. Uncovered stories are flagged. The plan goes to Linear separately, as a roadmap.
 
-### 5.5 The AI router
-
-All website AI calls go through `lib/llm.ts`:
-
-```
-"quality" tier: gemini-3.5-flash → gemini-3.8-flash → Groq gpt-oss-120b
-"light" tier:   gemini-3.5-flash-lite → 3.1-flash-lite → Groq gpt-oss-20b
-```
-
-Every Gemini model is tried with every configured key before moving on. A key that hits a quota or rate limit is skipped until it recovers; a model that is overloaded, retired or timing out is skipped on every key at once. Identical prompts are cached for a day. Each request is budgeted to finish inside Vercel's 60-second function limit, and keys never reach the browser.
-
 ---
 
 ## 6. MCP tools reference
@@ -290,62 +242,6 @@ Every Gemini model is tried with every configured key before moving on. A key th
 | `get_evaluation` | Which stages are saved, and the link |
 
 Every stage is saved for 90 days and viewable, read-only, at `/e/<id>`. Requests are rate-limited per IP.
-
----
-
-## 7. Getting started
-
-### Prerequisites
-
-- Node.js 18+
-- At least one [Google Gemini API key](https://aistudio.google.com/apikey)
-- (Optional) A [Groq API key](https://console.groq.com) as the last-resort fallback
-
-### Setup
-
-```bash
-git clone https://github.com/IAbdullahSlash/idea-evaluator.git
-cd idea-evaluator
-npm install
-```
-
-Create `.env.local` (see [Configuration](#8-configuration)), then:
-
-```bash
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) and write down your idea. The MCP server runs locally at `http://localhost:3000/api/mcp` once the Upstash variables are set.
-
----
-
-## 8. Configuration
-
-| Variable | Required | Purpose |
-|----------|----------|---------|
-| `GEMINI_API_KEY` or `GEMINI_API_KEY_1` | Yes | Gemini API key |
-| `GEMINI_API_KEY_2`, `GEMINI_API_KEY_3`, … | No | More keys, each from a different Google project (quota is per project) |
-| `GEMINI_API_KEYS` | No | Alternatively, a comma-separated list of keys |
-| `GROQ_API_KEY` | No | Groq key, used when no Gemini model is available |
-| `GITHUB_TOKEN` | No | Raises the GitHub search rate limit; search works without it |
-| `STACKEXCHANGE_KEY` | No | Raises the Stack Exchange limit from 300 to 10,000 requests a day (free at stackapps.com) |
-| `KV_REST_API_URL`, `KV_REST_API_TOKEN` | For MCP | Upstash Redis for saved evaluations and rate limits; added by Vercel's Upstash integration |
-| `LINEAR_CLIENT_ID`, `LINEAR_CLIENT_SECRET` | For Linear | The site's Linear OAuth app, for sending plans to Linear (see below) |
-
-A system-wide environment variable with the same name takes priority over `.env.local`.
-
-### Sending plans to Linear
-
-The Hand-off page builds the plan in the person's own Linear workspace. To turn it on, create an OAuth application in Linear (**Settings → API → OAuth applications → New**) with these callback URLs, one per address the site runs on:
-
-```
-https://idea-evaluator-slash.vercel.app/api/linear/callback
-http://localhost:3000/api/linear/callback
-```
-
-Then set its client ID and secret as `LINEAR_CLIENT_ID` and `LINEAR_CLIENT_SECRET` in Vercel and in `.env.local`. Without them the page says sending to Linear isn't set up. People sign in with Linear (OAuth with PKCE); their token is kept in an httpOnly cookie for its 24-hour lifetime and never stored on the server.
-
-In development, `GET /api/llm-status` shows which model/key pairs are available or cooling down (never the keys themselves).
 
 ---
 
@@ -405,40 +301,6 @@ showcase/                    # Published to GitHub Pages (see section 10)
 
 ---
 
-## 10. The showcase and GitHub Actions
-
-The app deploys to Vercel. The **showcase** (the walkthrough video, the interactive diagrams and the README screenshots) lives in `showcase/` and is published to GitHub Pages by a GitHub Actions workflow, [`.github/workflows/pages.yml`](.github/workflows/pages.yml):
-
-| Job | What it does |
-|---|---|
-| **Check the showcase files** | Every diagram's JSON source parses and has its `.html` page and `.png` preview; every `showcase/…` path this README points to exists |
-| **Deploy to GitHub Pages** | Uploads `showcase/` as the Pages artifact and deploys it to [iabdullahslash.github.io/idea-evaluator](https://iabdullahslash.github.io/idea-evaluator/) |
-
-It runs on every push to `main` that changes `showcase/` or the workflow, and can be run by hand from the **Actions** tab. One-time setup: in the repository's **Settings → Pages**, set **Source** to **GitHub Actions**.
-
-**Updating a diagram.** Edit its JSON source, then validate and render it with Archify's CLI (`node bin/archify.mjs` from an Archify install), and refresh its `.png` preview from the rendered page:
-
-```bash
-node bin/archify.mjs validate workflow showcase/diagrams/four-stage-evaluation.workflow.json --quality showcase
-node bin/archify.mjs deliver workflow showcase/diagrams/four-stage-evaluation.workflow.json showcase/diagrams/four-stage-evaluation.html --quality showcase
-```
-
-Commit the `.json`, `.html` and `.png` together; the check job fails if one is missing.
-
----
-
-## 11. Key design decisions
-
-- **Honest over encouraging.** The mark is the average of six explained criteria, so every score can be traced to its reasons.
-- **Progressive stages.** Each stage unlocks only when you choose to continue.
-- **Real sources, labelled.** Discussions and repositories come from live searches; existing solutions come from the model's knowledge with every link checked, and are labelled as such.
-- **The server checks, the AI writes.** Through MCP, the server does the arithmetic, the link checks and the traceability, so the result doesn't depend on the model getting sums right.
-- **Search results are data.** Quoted results are marked as data, not instructions, in every tool reply.
-- **Spread the AI load.** A router walks models and keys so one exhausted quota doesn't stop an evaluation.
-- **Server-side keys.** API keys never reach the browser.
-
----
-
 ## 12. Tech stack
 
 | Layer | Technology |
@@ -457,8 +319,3 @@ Commit the `.json`, `.html` and `.png` together; the check job fails if one is m
 | Hosting | Vercel (app); GitHub Pages via GitHub Actions (showcase) |
 | Diagrams | [Archify](showcase/diagrams/) (validated JSON → interactive HTML) |
 
----
-
-## 13. License
-
-MIT
