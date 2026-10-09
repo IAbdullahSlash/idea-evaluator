@@ -22,9 +22,9 @@ A mark out of ten with the reasons, the real risks, what people are already sayi
 
 <!-- mcp-connector-walkthrough-video -->
 
-[![The Idea Evaluator in your own AI: watch the walkthrough](showcase/media/mcp-connector-walkthrough-poster.jpg)](https://iabdullahslash.github.io/idea-evaluator/#video)
+https://github.com/user-attachments/assets/9f3f95a9-3afa-44b7-9d22-c82dcbc27014
 
-<sub><b>57 s · 1080p · with sound.</b> Click the picture to play it on the showcase page, or <a href="showcase/media/mcp-connector-walkthrough.mp4">download mcp-connector-walkthrough.mp4</a>.</sub>
+<sub><b>57 s · 1080p · with sound.</b> Video not playing? <a href="https://iabdullahslash.github.io/idea-evaluator/#video">Watch it on the showcase page</a> or <a href="showcase/media/mcp-connector-walkthrough.mp4">download mcp-connector-walkthrough.mp4</a>.</sub>
 
 The video follows one real evaluation (a bake planner for small bakeries) through the MCP connector, from a one-line idea to a traced SRS:
 
