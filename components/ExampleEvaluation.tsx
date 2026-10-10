@@ -37,7 +37,9 @@ function useSeen<T extends Element>() {
     const el = ref.current
     if (!el || seen) return
     if (typeof IntersectionObserver === "undefined") return setSeen(true)
-    const io = new IntersectionObserver(([e]) => e.isIntersecting && setSeen(true), { threshold: 0.35 })
+    // Any part of it in the upper 80% of the screen counts. A share of its height (as before) can never be
+    // reached when the example is taller than a short or narrow window, and the score then never appeared.
+    const io = new IntersectionObserver(([e]) => e.isIntersecting && setSeen(true), { threshold: 0, rootMargin: "0px 0px -20% 0px" })
     io.observe(el)
     return () => io.disconnect()
   }, [seen])
