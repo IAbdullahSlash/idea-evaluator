@@ -17,9 +17,9 @@ export default function Home() {
       <Navbar />
       <main>
         <Hero />
+        <ConnectAI />
         <ExampleEvaluation />
         <HowItWorks />
-        <ConnectAI />
         <Audiences />
         <Features />
         <FAQ />

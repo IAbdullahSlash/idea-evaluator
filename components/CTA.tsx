@@ -11,12 +11,12 @@ export function CTA() {
             Find out before you spend the semester on it.
           </h2>
           <p className="mt-5 max-w-[56ch] text-[1.0625rem] leading-relaxed text-ink-soft">
-            Tell it the time you have and your experience, and the idea is marked with that in mind. No account needed.
+            Your AI asks the time you have and your experience, and the idea is marked with that in mind. No account needed.
           </p>
         </div>
         <Button asChild size="lg" className="h-12 w-full px-6 text-base sm:w-auto">
-          <Link href="/analysis?new">
-            Start with a blank page <ArrowRight />
+          <Link href="#connect">
+            Add the connector <ArrowRight />
           </Link>
         </Button>
       </div>

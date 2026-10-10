@@ -5,8 +5,8 @@ import { Check, Copy } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 /*
- * The other way in: add the Idea Evaluator to your own AI as a connector (an
- * MCP server). Your AI does the thinking with the same method; every stage is
+ * The way in: add the Idea Evaluator to your own AI as a connector (an MCP
+ * server). Your AI does the thinking with the same method; every stage is
  * saved here, with a link to share.
  */
 
@@ -64,11 +64,11 @@ export function ConnectAI() {
   const current = apps.find((a) => a.id === app)!
 
   return (
-    <section id="connect" className="mx-auto max-w-6xl px-4 py-16 sm:px-6 lg:py-24">
+    <section id="connect" className="mx-auto max-w-6xl scroll-mt-20 px-4 py-16 sm:px-6 lg:py-20">
       <div className="grid gap-10 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:gap-16">
         <div>
           <h2 className="text-[2rem] font-semibold leading-tight tracking-[-0.03em] text-ink sm:text-[2.5rem]">
-            Or use it in your own AI
+            Use it in your own AI
           </h2>
           <p className="mt-4 text-[1.0625rem] leading-relaxed text-ink-soft">
             Add the Idea Evaluator to ChatGPT, Claude, or Gemini as a connector. Your AI marks the idea with the same

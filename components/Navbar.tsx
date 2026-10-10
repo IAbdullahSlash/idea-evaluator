@@ -12,8 +12,8 @@ export function Navbar() {
         <>
           <ThemeToggle />
           <Button asChild size="sm">
-            <Link href="/analysis?new">
-              Evaluate<span className="hidden sm:inline"> an idea</span>
+            <Link href="/#connect">
+              Connect<span className="hidden sm:inline"> your AI</span>
             </Link>
           </Button>
         </>

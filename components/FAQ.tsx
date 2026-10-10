@@ -7,11 +7,15 @@ import { ChevronDown } from "lucide-react"
 const faqs = [
   {
     q: "Do I need an account?",
-    a: "No. Write your idea and it is marked straight away.",
+    a: "Not here. Add the connector address to your AI and start a chat; the connector needs no sign-in. Some AI apps offer custom connectors only on certain plans.",
+  },
+  {
+    q: "Which AI apps does it work in?",
+    a: "Claude, ChatGPT (with developer mode on), the Gemini CLI, and any app that supports remote MCP connectors, such as Cursor or VS Code.",
   },
   {
     q: "Where does my idea go?",
-    a: "It is sent to Google's Gemini model to be marked, and the result is kept in your own browser. It is not saved to an account or a database.",
+    a: "Your own AI reads it and does the marking. The connector saves each stage your AI finishes for 90 days, at a link you can share, and runs the searches for similar projects and discussions. It runs no AI of its own.",
   },
   {
     q: "How much should I trust the score?",
@@ -19,11 +23,7 @@ const faqs = [
   },
   {
     q: "Where do the similar projects come from?",
-    a: "From a GitHub search for your idea. Each one links to its repository so you can read it yourself.",
-  },
-  {
-    q: "Can I change my idea after it is marked?",
-    a: "Yes, while it is on the snapshot page: edit it and mark it again as many times as you like. Once you move on, the later pages build on that version.",
+    a: "From live searches of GitHub, Hacker News, Stack Exchange and Google News, run by the connector rather than remembered by the AI. Each one links to its source so you can read it yourself.",
   },
 ]
 
